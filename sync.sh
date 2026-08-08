@@ -35,16 +35,21 @@ else
   done < "$REPO/targets"
 fi
 
-# The rendered block: markers, a note that it is generated, then the prompt.
-block="$(mktemp)"; trap 'rm -f "$block" "$out"' EXIT
+block="$(mktemp)"; body="$(mktemp)"; out="$(mktemp)"
+trap 'rm -f "$block" "$body" "$out"' EXIT
+
+# Refuse to run on a source that isn't there or has been truncated. Without
+# this a missing or emptied AGENTS.md renders an empty block and every target
+# is "synced" into losing the shared rules, reporting success as it goes.
+[ -s "$SOURCE" ] || { echo "$SOURCE is missing or empty; refusing to sync" >&2; exit 1; }
+
 # The source's H1 is dropped: the target already has its own title, and two
 # level-one headings in one file read as two documents.
-{
-  printf '%s\n%s\n\n' "$BEGIN" "$NOTE"
-  awk 'NR==1 && /^# / { skip=1; next } skip && NF==0 { skip=0; next } { print }' "$SOURCE"
-  printf '\n%s\n' "$END"
-} > "$block"
-out="$(mktemp)"
+awk 'NR==1 && /^# / { skip=1; next } skip && NF==0 { skip=0; next } { print }' "$SOURCE" > "$body"
+[ -s "$body" ] || { echo "$SOURCE has no content below its title; refusing to sync" >&2; exit 1; }
+
+# The rendered block: markers, a note that it is generated, then the prompt.
+{ printf '%s\n%s\n\n' "$BEGIN" "$NOTE"; cat "$body"; printf '\n%s\n' "$END"; } > "$block"
 
 # Replace an existing block, or insert one after the file's H1 so the title
 # stays first and repo-specific sections still come after the shared rules.
@@ -59,10 +64,13 @@ render() {
       { print }
     ' "$file"
   else
+    # The H1 has to be a real heading. A line like "# not a heading" inside a
+    # fenced code block is not one, and inserting there corrupts the fence.
     awk -v blockfile="$blockfile" '
       BEGIN { while ((getline l < blockfile) > 0) block = block l "\n" }
+      /^```/ { fence = !fence }
       { print }
-      !done && /^# / { print ""; printf "%s", block; done = 1 }
+      !done && !fence && /^# / { print ""; printf "%s", block; done = 1 }
       END { if (!done) printf "%s", block }
     ' "$file"
   fi

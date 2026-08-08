@@ -47,11 +47,19 @@ if [ -d "$PRIVATE" ]; then
   )
 fi
 
-# Prints one of: ok, missing, wrong-link, drifted (a real file where we want a
-# link — most likely a tool rewrote the file instead of following the symlink).
+# Prints one of: ok, missing, wrong-link, no-source, or drifted (a real file
+# where we want a link — most likely a tool rewrote the file instead of
+# following the symlink).
+#
+# no-source comes first because a link to a file that isn't there still reads
+# as a link: without this check a missing source is linked anyway, and both
+# install and status call the result ok while the config silently delivers
+# nothing.
 state() {
   local src="$1" dst="$2"
-  if [ -L "$dst" ]; then
+  if [ ! -e "$src" ]; then
+    echo no-source
+  elif [ -L "$dst" ]; then
     [ "$(readlink "$dst")" = "$src" ] && echo ok || echo wrong-link
   elif [ -e "$dst" ]; then
     echo drifted
@@ -84,6 +92,9 @@ cmd_install() {
     local s; s="$(state "$src" "$dst")"
     case "$s" in
       ok) printf '%-10s %s\n' "ok" "${dst/#$HOME/~}"; continue ;;
+      no-source)
+        printf '%-10s %s (nothing at %s)\n' "skipped" "${dst/#$HOME/~}" "${src/#$HOME/~}"
+        rc=1; continue ;;
       drifted)
         mv "$dst" "$dst.bak.$stamp"
         printf '%-10s %s\n' "backed-up" "${dst/#$HOME/~}.bak.$stamp"
