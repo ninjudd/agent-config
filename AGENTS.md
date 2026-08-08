@@ -39,6 +39,73 @@ rule wins. PR bodies go up unwrapped, so the squashed commit message inherits
 long unwrapped paragraphs: worse in `git log`, better everywhere the text is
 actually read. Never hard-wrap a PR body to tidy the commit it becomes.
 
+### Every PR body ends with how to try it
+
+Close each description with a short **Testing** section: the exact commands to
+run, in order, and what a person should see. Copy-pasteable — real label names,
+real paths, no placeholders to fill in — and run them yourself first, from the
+directory you tell me to run them from. A command in a PR body that errors is
+worse than no instructions, because I find out by hitting the error.
+
+Say plainly what needs building or installing first (`pnpm build` so the `field`
+on my PATH is current, `field setup <worker>`, a native rebuild), and what state
+it leaves behind — a spawned daemon, generated files, a modified checkout.
+
+Name the thing that would show the change is *wrong*, not only the happy path.
+"You should see X" is a demo; "before this you'd get Y here" is a test. Where a
+change cannot be exercised by hand — a protocol version bump, a stale-daemon
+guard — say that instead of inventing a ritual, and point at the test that does
+cover it.
+
+If a command in the section is not the one I would naturally reach for, that is
+worth noticing rather than documenting around: I typed `field --version` for the
+version report and got the bare number, which was the design working as written
+and the wrong design.
+
+## Stacked pull requests
+
+Setting the second pull request's base to the first branch is the smallest part
+of stacking, and on its own it produces two pull requests that merely share a
+pointer. **Make it an actual stack**, which GitHub now supports natively —
+stacked pull requests entered public preview on 2026-07-30, so this is a real
+primitive rather than a convention to imitate.
+
+**Create it as a stack.** The CLI is an official extension and is not installed
+by default: `gh extension install github/gh-stack`, then `gh stack init <name>`,
+`gh stack add <branch>`, `gh stack submit`. From the web UI, create the child
+with its base set to the parent's branch and choose **Create stack** to link
+them. Either way the result is what a base pointer alone does not give you: a
+stack icon and a stack map in each pull request's merge box, listing every
+layer with its status and letting a reviewer move between them.
+
+That map is the reason to bother. A reviewer opening a child sees a correct diff
+either way, but only a real stack tells them where they are in the series and
+how much of it is theirs to review.
+
+**The body is still the commit message.** A squashed merge takes it verbatim, so
+keep stack scaffolding out of it — the stack map already says what is stacked on
+what, which is precisely why it should not also be prose in the body that ships
+into `git log`. Write the body as the commit message it becomes, as if the
+branch had never been stacked. Anything a reviewer needs about the stack itself
+goes in a comment, which merging discards.
+
+**When the base moves, rebase the child and re-run its full gate.** A clean base
+does not vouch for the child — the child's tests run against code the base just
+changed. Rebase, `git push --force-with-lease`, run the gate again. Fix a
+finding on the branch that owns the code, the parent's if the code is the
+parent's, and reply on whichever pull request carries the thread.
+`start-fix-loop`'s "Stacked pull requests" section covers that half in detail.
+
+**Merging is still mine, and stacks make that easier to get wrong.** A stack can
+be merged in one click, all layers together — so it is exactly the button not to
+press. Open the stack and hand over the URLs. When I merge a base on its own,
+check that the child retargeted and is still mergeable rather than assuming
+both.
+
+Public preview means subject to change, and merge-queue support was still
+rolling out when this was written. Check the behaviour you depend on rather than
+trusting this paragraph to have aged well.
+
 ## Pull request reviews are local by default
 
 When I ask to "review this PR" (or equivalent), review the checked-out pull
