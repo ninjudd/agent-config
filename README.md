@@ -92,11 +92,51 @@ whether the real file holds changes worth keeping before re-running
 `./install.sh`, which moves it aside to `.bak.<timestamp>` rather than deleting
 it.
 
-## What this does not reach
+## Reaching cloud sessions: `sync.sh`
 
-Cloud sessions start from a clone of the repository you point them at, so
-nothing here is present in one. Claude Code's own documentation is blunt about
-it: your user `~/.claude/CLAUDE.md` is not available in a cloud session,
-because it "lives on your machine, not in the repo," and the fix is to "commit
-it to the repo." These rules therefore apply to local work, and a repository
-that needs them enforced in the cloud has to carry its own copy.
+Everything above is machine-local. A cloud session starts from a clone and
+never sees `~/CLAUDE.md`; Claude Code's own documentation is blunt about it —
+your user `~/.claude/CLAUDE.md` is not available there because it "lives on
+your machine, not in the repo," and the fix is to "commit it to the repo."
+
+So `sync.sh` copies `AGENTS.md` into each repo listed in `targets`, as a
+managed block right after that file's title:
+
+```sh
+./sync.sh                 # write the block into every repo in ./targets
+./sync.sh <path> ...      # into these repos instead
+./sync.sh --check [...]   # report stale repos, exit 1 if any
+```
+
+```markdown
+# Project Guidelines
+
+<!-- BEGIN SHARED: ninjudd/agent-config -->
+...the shared prompt, verbatim...
+<!-- END SHARED -->
+
+## Docs
+...repo-specific content, hand-written...
+```
+
+It has to be the text itself, not a reference to it. Codex reads only
+`AGENTS.md` files and has no import syntax, so inside a repo the shared rules
+either appear verbatim or not at all. The block goes after the title so the
+repo keeps one H1, and before the repo's own sections so those are read last.
+
+This is deliberate duplication. The difference from the copies it replaces is
+that these are generated and verified rather than hand-maintained: the old ones
+had drifted into claiming that nothing reviewed those repos automatically,
+while Bugbot was reviewing every pull request.
+
+### Keeping it honest
+
+Each synced repo carries a workflow that clones this one and runs
+`sync.sh --check` against itself, so a block edited in place or left behind
+fails CI rather than rotting quietly.
+
+The consequence is worth knowing: changing `AGENTS.md` here makes every synced
+repo stale, and their next pull request goes red until you run `./sync.sh` and
+commit the result. That is the intended behaviour — the red check is the
+to-do list — but it means an edit here is a small fan-out of commits, not a
+free one.

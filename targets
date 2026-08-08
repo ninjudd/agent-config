@@ -1,0 +1,6 @@
+# Repos that carry the shared prompt as a managed block.
+# Paths are local checkouts; ~ is expanded.
+~/amnesiac/modal
+~/amnesiac/fyra
+~/amnesiac/field
+~/ninjudd/msg
