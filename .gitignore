@@ -1,0 +1,11 @@
+# Credentials never belong here, even by accident.
+auth.json
+.credentials.json
+*.bak
+*.bak.*
+
+# Codex materializes its built-in skills into the linked skills directory, which
+# means into this repo. They ship with Codex and are regenerated on demand.
+/skills/.system/
+
+.DS_Store
