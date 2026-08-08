@@ -89,12 +89,19 @@ into `git log`. Write the body as the commit message it becomes, as if the
 branch had never been stacked. Anything a reviewer needs about the stack itself
 goes in a comment, which merging discards.
 
-**When the base moves, rebase the child and re-run its full gate.** A clean base
-does not vouch for the child — the child's tests run against code the base just
-changed. Rebase, `git push --force-with-lease`, run the gate again. Fix a
-finding on the branch that owns the code, the parent's if the code is the
-parent's, and reply on whichever pull request carries the thread.
-`start-fix-loop`'s "Stacked pull requests" section covers that half in detail.
+**When the base moves, re-run the child's full gate.** A clean base does not
+vouch for the child — the child's tests run against code the base just changed,
+and no command re-runs the gate for you.
+
+Restack with `gh stack sync`, not by hand. It cascade-rebases every branch onto
+its updated parent and pushes them atomically with `--force-with-lease`, where
+rebasing and force-pushing "the child" is one-layer thinking: on A ← B ← C,
+restacking B alone leaves C parented on B's superseded tip, so C's pull request
+shows B's old commits inside its own diff and its reviewer reads changes that
+are not theirs. Nothing errors — you find out when someone reviews the wrong
+diff. Use `gh stack rebase` for the rebase without the push. Fix a finding on
+the branch that owns the code, the parent's if the code is the parent's, and
+reply on whichever pull request carries the thread.
 
 **Merging is still mine, and stacks make that easier to get wrong.** A stack can
 be merged in one click, all layers together — so it is exactly the button not to
