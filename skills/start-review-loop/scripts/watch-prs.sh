@@ -17,6 +17,10 @@
 # of `<owner/repo> <number> <sha> <ref>` to baseline heads as already reviewed;
 # an empty file means every open pull request reports as new, which is the
 # right default when the loop is establishing itself.
+#
+# Tracks up to 200 open pull requests per repository. That is a documented
+# property rather than an accident: past the limit a tracked pull request would
+# be missing from the answer and read as closed.
 
 set -uo pipefail
 
@@ -48,7 +52,12 @@ while true; do
     # A failed query must never look like "everything closed". On error, carry
     # this repo's rows forward untouched and try again next cycle — otherwise a
     # network blip reports every tracked pull request as closed.
-    if ! out=$(gh pr list --repo "$repo" --state open \
+    # --limit is not optional here. `gh pr list` defaults to 30, and a tracked
+    # pull request beyond that page is simply absent from the answer — which
+    # the closure check below cannot tell apart from closed, so it would retire
+    # a live pull request and never mention it again. Same failure as the
+    # nested-guard bug, reached through a different door.
+    if ! out=$(gh pr list --repo "$repo" --state open --limit 200 \
                  --json number,headRefOid,headRefName \
                  --jq '.[] | "\(.number) \(.headRefOid) \(.headRefName)"' 2>/dev/null); then
       carried=$(grep "^$repo " "$STATE" 2>/dev/null || true)

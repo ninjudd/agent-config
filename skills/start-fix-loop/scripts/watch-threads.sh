@@ -51,7 +51,10 @@ while true; do
 
     # A failed query must not be read as "nothing outstanding". Carry this
     # repo's rows forward so a blip cannot silently retire a live finding.
-    if ! prs=$(gh pr list --repo "$slug" --state open --json number --jq '.[].number' 2>/dev/null); then
+    # --limit is not optional: `gh pr list` defaults to 30, and pull requests
+    # past that page are never scanned, so their findings are never announced
+    # at all. Tracks up to 200 open pull requests per repository.
+    if ! prs=$(gh pr list --repo "$slug" --state open --limit 200 --json number --jq '.[].number' 2>/dev/null); then
       carried=$(grep " $slug " "$STATE" 2>/dev/null || true)
       [ -n "$carried" ] && new_state="$new_state$carried
 "
@@ -59,7 +62,7 @@ while true; do
     fi
 
     for n in $prs; do
-      threads=$(gh api graphql -f query='
+      if ! threads=$(gh api graphql -f query='
         query($o:String!,$r:String!,$n:Int!){ repository(owner:$o,name:$r){
           pullRequest(number:$n){ reviewThreads(first:100){ nodes{
             id isResolved path line
@@ -68,11 +71,24 @@ while true; do
         --jq '.data.repository.pullRequest.reviewThreads.nodes[]
               | select(.isResolved == false)
               | "\(.id)\t\(.path):\(.line // "?")\t\(.comments.nodes[0].author.login // "?")\t\(.comments.nodes[0].body // "" | gsub("[\r\n]+"; " ") | .[0:130])"' \
-        2>/dev/null) || continue
+        2>/dev/null); then
+        # The same rule as the repo-level guard, for the same reason, and it is
+        # the case that falls between them: the repo query answered but this
+        # one did not. Dropping this pull request's rows would blank every one
+        # of its threads' last-announced stamps, so next cycle they all
+        # re-announce as fresh findings at --interval rather than --renotify.
+        # That is a flood, on a repository whose API is already flaky, and
+        # Monitor stops a watcher that produces too many events — leaving the
+        # fix loop deaf while its skill reads silence as "nothing outstanding".
+        carried=$(awk -v s="$slug" -v p="$n" '$2==s && $3==p' "$STATE" 2>/dev/null || true)
+        [ -n "$carried" ] && new_state="$new_state$carried
+"
+        continue
+      fi
 
       while IFS=$'\t' read -r tid loc who snip; do
         [ -n "${tid:-}" ] || continue
-        last=$(awk -v t="$tid" '$1==t {print $3}' "$STATE" 2>/dev/null)
+        last=$(awk -v t="$tid" '$1==t {print $4}' "$STATE" 2>/dev/null)
         if [ -z "$last" ]; then
           echo "FINDING $slug#$n $loc [$who] — $snip"
           last=$now
@@ -80,7 +96,7 @@ while true; do
           echo "FINDING (still open) $slug#$n $loc [$who] — $snip"
           last=$now
         fi
-        new_state="$new_state$tid $slug $last
+        new_state="$new_state$tid $slug $n $last
 "
       done <<EOF
 $threads
@@ -88,9 +104,11 @@ EOF
     done
   done
 
-  # Rebuilt from what is currently unresolved, so a thread that got resolved
-  # simply falls out. Rows are only ever carried forward for a repo whose query
-  # failed, never for one that answered.
+  # Rows are `<threadId> <owner/repo> <pr> <lastAnnouncedEpoch>`. Rebuilt each
+  # cycle from what is currently unresolved, so a thread that got resolved
+  # simply falls out. Rows are only ever carried forward for a query that
+  # failed — the repository listing, or one pull request's threads — never for
+  # one that answered.
   printf '%s' "$new_state" | grep -v '^[[:space:]]*$' > "$STATE.tmp" 2>/dev/null
   mv "$STATE.tmp" "$STATE" 2>/dev/null
 
