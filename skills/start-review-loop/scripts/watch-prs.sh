@@ -4,10 +4,14 @@
 # `Monitor` with `persistent: true`, where each stdout line becomes one
 # notification.
 #
-#   NEW PR    a pull request opened that the state file has not seen
-#   NEW HEAD  a tracked pull request's head SHA moved
-#   CLOSED    a tracked pull request left the open set
-#   BRANCH    the watched worktree changed branch
+#   NEW PR     a pull request opened that the state file has not seen
+#   NEW HEAD   a tracked pull request's head SHA moved
+#   RESPONDED  still CHANGES_REQUESTED, every thread resolved, head unchanged —
+#              the author answered without pushing, so no head event is coming.
+#              Once per head, and never alongside NEW PR or NEW HEAD, which
+#              already say to review that head.
+#   CLOSED     a tracked pull request left the open set
+#   BRANCH     the watched worktree changed branch
 #
 # Usage:
 #   watch-prs.sh --repos owner/a[,owner/b...] --state <path>
@@ -74,11 +78,18 @@ while true; do
     # Asked once per repository; on failure every pull request's flag is simply
     # carried forward by the row rebuild below, and it retries next cycle.
     owner="${repo%%/*}"; name="${repo##*/}"
-    responded=$(gh api graphql -f query='
-      query($o:String!,$r:String!){ repository(owner:$o,name:$r){
-        pullRequests(states:OPEN, first:100){ nodes{
-          number reviewDecision
-          reviewThreads(first:100){ nodes{ isResolved } } } } } }' \
+    # Paginated to match the 200 the header promises: GraphQL caps `first` at
+    # 100 per page, so a single page would cover fewer pull requests than the
+    # `gh pr list --limit 200` above and the two halves would disagree.
+    # `orderBy` is pinned so the traversal is stable rather than arbitrary.
+    responded=$(gh api graphql --paginate -f query='
+      query($o:String!,$r:String!,$endCursor:String){ repository(owner:$o,name:$r){
+        pullRequests(states:OPEN, first:100, after:$endCursor,
+                     orderBy:{field:CREATED_AT, direction:ASC}){
+          pageInfo{ hasNextPage endCursor }
+          nodes{
+            number reviewDecision
+            reviewThreads(first:100){ nodes{ isResolved } } } } } }' \
       -f o="$owner" -f r="$name" \
       --jq '.data.repository.pullRequests.nodes[]
             | select(.reviewDecision == "CHANGES_REQUESTED")
@@ -99,7 +110,13 @@ while true; do
       elif [ "$known" != "$sha" ]; then
         echo "NEW HEAD $repo#$num ($ref): ${known:0:7} -> ${sha:0:7} — needs an exact-head review"
       fi
-      if [ "$responded" != "__QUERYFAILED__" ]; then
+      # Only when the head is known and unchanged — that is, when neither of
+      # the two events above fired for this pull request. RESPONDED exists for
+      # the case where nothing was pushed, so emitting it beside NEW HEAD or
+      # NEW PR would double the most frequent event in order to catch a rarer
+      # one, and every line here is a Monitor notification that counts toward
+      # the limit that stops a watcher.
+      if [ "$responded" != "__QUERYFAILED__" ] && [ -n "$known" ] && [ "$known" = "$sha" ]; then
         if printf '%s\n' "$responded" | grep -qx "$num"; then
           if [ "$flag" != "$sha" ]; then
             echo "RESPONDED $repo#$num ($ref) head=${sha:0:7} — still CHANGES_REQUESTED with every thread resolved; re-review this head"
