@@ -80,6 +80,18 @@ while true; do
     # findings live only in the summary body, which is precisely the case this
     # query exists to catch. `orderBy` is pinned so the traversal is stable
     # across pages rather than arbitrary.
+    #
+    # Ask `reviews(states:[CHANGES_REQUESTED])` rather than `latestReviews`.
+    # `latestReviews` is the most recent review *per author* whatever its
+    # state, and replying inside a thread files a COMMENTED review — so a
+    # reviewer answering their own thread displaces their standing changes
+    # request out of that connection while `reviewDecision` stays
+    # CHANGES_REQUESTED. The pull request would pass the outer filter, match
+    # nothing inside, and emit nothing: a false negative in exactly the case
+    # this query exists to catch, and one that correlates with discussion, so
+    # it goes quiet on the pull requests being argued about and stays loud on
+    # the ones nobody has touched. `last:1` is one line per pull request
+    # rather than per author, which is what the skill documents.
     if ! verdicts=$(gh api graphql --paginate -f query='
       query($o:String!,$r:String!,$endCursor:String){ repository(owner:$o,name:$r){
         pullRequests(states:OPEN, first:100, after:$endCursor,
@@ -87,13 +99,12 @@ while true; do
           pageInfo{ hasNextPage endCursor }
           nodes{
             number reviewDecision
-            latestReviews(first:100){ nodes{
-              state author{login} body commit{oid} } } } } } }' \
+            reviews(states:[CHANGES_REQUESTED], last:1){ nodes{
+              author{login} body commit{oid} } } } } } }' \
       -f o="$owner" -f r="$name" \
       --jq '.data.repository.pullRequests.nodes[]
             | select(.reviewDecision == "CHANGES_REQUESTED")
-            | . as $pr | .latestReviews.nodes[]
-            | select(.state == "CHANGES_REQUESTED")
+            | . as $pr | .reviews.nodes[]
             | "\($pr.number)\t\(.author.login)\t\(.commit.oid)\t\(.body // "" | gsub("[\r\n]+"; " ") | .[0:130])"' \
       2>/dev/null); then
       carried=$(awk -v s="$slug" '$1 ~ /^verdict:/ && $2==s' "$STATE" 2>/dev/null || true)
