@@ -152,9 +152,19 @@ EOF
         # That is a flood, on a repository whose API is already flaky, and
         # Monitor stops a watcher that produces too many events — leaving the
         # fix loop deaf while its skill reads silence as "nothing outstanding".
-        # Thread rows only. This repository's verdict rows were already
-        # rebuilt above, so carrying them again here would duplicate them.
-        carried=$(awk -v s="$slug" -v p="$n" '$1 !~ /^(verdict:|review:)/ && $2==s && $3==p' "$STATE" 2>/dev/null || true)
+        # Thread and review rows, excluding only verdict rows. The test is
+        # which kinds have already been rebuilt at this point: verdict rows
+        # were, above, per repository, so carrying them again here would
+        # duplicate them. Review rows are rebuilt below — past the `continue`
+        # on the next line — so excluding them here drops them outright,
+        # neither carried nor rebuilt, and every review on this pull request
+        # re-announces next cycle with no --renotify damping to throttle it.
+        #
+        # This is the third row kind added to this file, and the third time
+        # this carry-forward had to learn about one. The general rule: carry
+        # every kind whose rebuild happens later in this iteration, exclude
+        # only those already rebuilt before it.
+        carried=$(awk -v s="$slug" -v p="$n" '$1 !~ /^verdict:/ && $2==s && $3==p' "$STATE" 2>/dev/null || true)
         [ -n "$carried" ] && new_state="$new_state$carried
 "
         continue
@@ -186,8 +196,8 @@ EOF
       # window is exactly the trap: every reply the fix loop posts inside a
       # thread files an empty COMMENTED review, so `last:10` returns ten
       # replies and the bot review has been displaced — the latestReviews
-      # failure again, one query over. One line per review, keyed on author
-      # and reviewed SHA the way verdicts are. Never re-announced: a COMMENTED
+      # failure again, one query over. One line per review, keyed on the
+      # review's own id. Never re-announced: a COMMENTED
       # review has no resolved state to clear, so "(still open)" would be a
       # reminder with no off switch. Bodies empty once HTML comments are
       # stripped are skipped, which is also what keeps the loop's own replies
@@ -196,15 +206,21 @@ EOF
         --jq '.[] | select(.state == "COMMENTED")
               | (.body // "" | gsub("<!--([^-]|-[^-]|--[^>])*-->"; "") | gsub("<[^>]*>"; "") | gsub("[\r\n]+"; " ")) as $body
               | select(($body | gsub("[[:space:]]+"; "")) != "")
-              | "\(.user.login)\t\(.commit_id)\t\($body[0:130])"' \
+              | "\(.id)\t\(.user.login)\t\(.commit_id)\t\($body[0:130])"' \
         2>/dev/null); then
         carried=$(awk -v s="$slug" -v p="$n" '$1 ~ /^review:/ && $2==s && $3==p' "$STATE" 2>/dev/null || true)
         [ -n "$carried" ] && new_state="$new_state$carried
 "
       else
-        while IFS=$'\t' read -r cwho csha csnip; do
-          [ -n "${cwho:-}" ] || continue
-          cid="review:$cwho:$csha"
+        while IFS=$'\t' read -r crid cwho csha csnip; do
+          [ -n "${crid:-}" ] || continue
+          # Keyed on the review's own id, not author and SHA. The same account
+          # can submit several COMMENTED reviews against one commit — Codex or
+          # Bugbot re-run without a new push — and an author+SHA key collapses
+          # them into one row: the second review finds the first's timestamp
+          # and announces nothing, so its body-only findings are lost. The id
+          # is unique per review, which is the thing being announced.
+          cid="review:$crid"
           last=$(awk -v t="$cid" '$1==t {print $4}' "$STATE" 2>/dev/null)
           if [ -z "$last" ]; then
             echo "REVIEW $slug#$n by [$cwho] on ${csha:0:8} — $csnip"
