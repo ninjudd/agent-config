@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# watch-threads.sh — emit one line per unresolved review thread across every
-# open pull request in one or more GitHub repositories. Silent when nothing is
-# outstanding. Intended to run under Claude Code's `Monitor` with
+# watch-threads.sh — emit one line per piece of outstanding review work across
+# every open pull request in one or more GitHub repositories. Silent when
+# nothing is outstanding. Intended to run under Claude Code's `Monitor` with
 # `persistent: true`, where each stdout line becomes one notification.
 #
 #   FINDING   an unresolved review thread that has not been announced recently
+#   VERDICT   a pull request sitting at CHANGES_REQUESTED, thread or no thread
 #
 # This watch is deliberately **level-triggered**: it reports what is currently
 # unresolved rather than what just changed. An edge-triggered watch loses a
@@ -53,7 +54,9 @@ while true; do
     # repo's rows forward so a blip cannot silently retire a live finding.
     # --limit is not optional: `gh pr list` defaults to 30, and pull requests
     # past that page are never scanned, so their findings are never announced
-    # at all. Tracks up to 200 open pull requests per repository.
+    # at all. Scans threads for up to 200 open pull requests per repository;
+    # the verdict query below paginates instead and has no such ceiling, so
+    # the 200 is this listing's limit and not the script's.
     if ! prs=$(gh pr list --repo "$slug" --state open --limit 200 --json number --jq '.[].number' 2>/dev/null); then
       carried=$(grep " $slug " "$STATE" 2>/dev/null || true)
       [ -n "$carried" ] && new_state="$new_state$carried
@@ -68,12 +71,24 @@ while true; do
     # threads alone reads that as "nothing outstanding", which is the one
     # reading that must never be wrong. Asked per repository rather than per
     # pull request, because one query answers for all of them.
-    if ! verdicts=$(gh api graphql -f query='
-      query($o:String!,$r:String!){ repository(owner:$o,name:$r){
-        pullRequests(states:OPEN, first:100){ nodes{
-          number reviewDecision
-          latestReviews(first:20){ nodes{
-            state author{login} body commit{oid} } } } } } }' \
+    # Paginated, and it has to be: GraphQL connections cap `first` at 100 —
+    # `first:200` is rejected outright as EXCESSIVE_PAGINATION — so a single
+    # page would watch verdicts for 100 pull requests while the thread query
+    # above covers 200. That asymmetry fails in the worst available direction.
+    # A pull request past the page still has its threads watched, so a review
+    # with inline findings is still seen; the one lost is a review whose
+    # findings live only in the summary body, which is precisely the case this
+    # query exists to catch. `orderBy` is pinned so the traversal is stable
+    # across pages rather than arbitrary.
+    if ! verdicts=$(gh api graphql --paginate -f query='
+      query($o:String!,$r:String!,$endCursor:String){ repository(owner:$o,name:$r){
+        pullRequests(states:OPEN, first:100, after:$endCursor,
+                     orderBy:{field:CREATED_AT, direction:ASC}){
+          pageInfo{ hasNextPage endCursor }
+          nodes{
+            number reviewDecision
+            latestReviews(first:100){ nodes{
+              state author{login} body commit{oid} } } } } } }' \
       -f o="$owner" -f r="$name" \
       --jq '.data.repository.pullRequests.nodes[]
             | select(.reviewDecision == "CHANGES_REQUESTED")
