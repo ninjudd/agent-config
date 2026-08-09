@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# watch-threads.sh — emit one line per unresolved review thread across every
-# open pull request in one or more GitHub repositories. Silent when nothing is
-# outstanding. Intended to run under Claude Code's `Monitor` with
+# watch-threads.sh — emit one line per piece of outstanding review work across
+# every open pull request in one or more GitHub repositories. Silent when
+# nothing is outstanding. Intended to run under Claude Code's `Monitor` with
 # `persistent: true`, where each stdout line becomes one notification.
 #
 #   FINDING   an unresolved review thread that has not been announced recently
+#   VERDICT   a pull request sitting at CHANGES_REQUESTED, thread or no thread
 #
 # This watch is deliberately **level-triggered**: it reports what is currently
 # unresolved rather than what just changed. An edge-triggered watch loses a
@@ -53,12 +54,81 @@ while true; do
     # repo's rows forward so a blip cannot silently retire a live finding.
     # --limit is not optional: `gh pr list` defaults to 30, and pull requests
     # past that page are never scanned, so their findings are never announced
-    # at all. Tracks up to 200 open pull requests per repository.
+    # at all. Scans threads for up to 200 open pull requests per repository;
+    # the verdict query below paginates instead and has no such ceiling, so
+    # the 200 is this listing's limit and not the script's.
     if ! prs=$(gh pr list --repo "$slug" --state open --limit 200 --json number --jq '.[].number' 2>/dev/null); then
       carried=$(grep " $slug " "$STATE" 2>/dev/null || true)
       [ -n "$carried" ] && new_state="$new_state$carried
 "
       continue
+    fi
+
+    # A verdict is outstanding work even with no thread attached to it. A
+    # reviewer may put every finding in the review summary body and open no
+    # inline thread at all, and then the thread query below is correctly
+    # silent while the pull request sits blocked at CHANGES_REQUESTED. Watching
+    # threads alone reads that as "nothing outstanding", which is the one
+    # reading that must never be wrong. Asked per repository rather than per
+    # pull request, because one query answers for all of them.
+    # Paginated, and it has to be: GraphQL connections cap `first` at 100 —
+    # `first:200` is rejected outright as EXCESSIVE_PAGINATION — so a single
+    # page would watch verdicts for 100 pull requests while the thread query
+    # above covers 200. That asymmetry fails in the worst available direction.
+    # A pull request past the page still has its threads watched, so a review
+    # with inline findings is still seen; the one lost is a review whose
+    # findings live only in the summary body, which is precisely the case this
+    # query exists to catch. `orderBy` is pinned so the traversal is stable
+    # across pages rather than arbitrary.
+    #
+    # Ask `reviews(states:[CHANGES_REQUESTED])` rather than `latestReviews`.
+    # `latestReviews` is the most recent review *per author* whatever its
+    # state, and replying inside a thread files a COMMENTED review — so a
+    # reviewer answering their own thread displaces their standing changes
+    # request out of that connection while `reviewDecision` stays
+    # CHANGES_REQUESTED. The pull request would pass the outer filter, match
+    # nothing inside, and emit nothing: a false negative in exactly the case
+    # this query exists to catch, and one that correlates with discussion, so
+    # it goes quiet on the pull requests being argued about and stays loud on
+    # the ones nobody has touched. `last:1` is one line per pull request
+    # rather than per author, which is what the skill documents.
+    if ! verdicts=$(gh api graphql --paginate -f query='
+      query($o:String!,$r:String!,$endCursor:String){ repository(owner:$o,name:$r){
+        pullRequests(states:OPEN, first:100, after:$endCursor,
+                     orderBy:{field:CREATED_AT, direction:ASC}){
+          pageInfo{ hasNextPage endCursor }
+          nodes{
+            number reviewDecision
+            reviews(states:[CHANGES_REQUESTED], last:1){ nodes{
+              author{login} body commit{oid} } } } } } }' \
+      -f o="$owner" -f r="$name" \
+      --jq '.data.repository.pullRequests.nodes[]
+            | select(.reviewDecision == "CHANGES_REQUESTED")
+            | . as $pr | .reviews.nodes[]
+            | "\($pr.number)\t\(.author.login)\t\(.commit.oid)\t\(.body // "" | gsub("[\r\n]+"; " ") | .[0:130])"' \
+      2>/dev/null); then
+      carried=$(awk -v s="$slug" '$1 ~ /^verdict:/ && $2==s' "$STATE" 2>/dev/null || true)
+      [ -n "$carried" ] && new_state="$new_state$carried
+"
+    else
+      while IFS=$'\t' read -r vn vwho vsha vsnip; do
+        [ -n "${vn:-}" ] || continue
+        # Keyed on author and reviewed SHA, so a re-review of a new head is a
+        # new row and announces immediately rather than waiting out --renotify.
+        vid="verdict:$vwho:$vsha"
+        last=$(awk -v t="$vid" '$1==t {print $4}' "$STATE" 2>/dev/null)
+        if [ -z "$last" ]; then
+          echo "VERDICT $slug#$vn CHANGES_REQUESTED on ${vsha:0:8} [$vwho] — $vsnip"
+          last=$now
+        elif [ $((now - last)) -ge "$RENOTIFY" ]; then
+          echo "VERDICT (still open) $slug#$vn CHANGES_REQUESTED on ${vsha:0:8} [$vwho] — $vsnip"
+          last=$now
+        fi
+        new_state="$new_state$vid $slug $vn $last
+"
+      done <<EOF
+$verdicts
+EOF
     fi
 
     for n in $prs; do
@@ -80,7 +150,9 @@ while true; do
         # That is a flood, on a repository whose API is already flaky, and
         # Monitor stops a watcher that produces too many events — leaving the
         # fix loop deaf while its skill reads silence as "nothing outstanding".
-        carried=$(awk -v s="$slug" -v p="$n" '$2==s && $3==p' "$STATE" 2>/dev/null || true)
+        # Thread rows only. This repository's verdict rows were already
+        # rebuilt above, so carrying them again here would duplicate them.
+        carried=$(awk -v s="$slug" -v p="$n" '$1 !~ /^verdict:/ && $2==s && $3==p' "$STATE" 2>/dev/null || true)
         [ -n "$carried" ] && new_state="$new_state$carried
 "
         continue
