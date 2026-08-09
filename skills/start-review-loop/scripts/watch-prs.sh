@@ -107,8 +107,16 @@ while true; do
       [ -n "$flag" ] || flag="-"
       if [ -z "$known" ]; then
         echo "NEW PR $repo#$num ($ref) head=${sha:0:7} — unreviewed, needs an exact-head review"
+        # Announcing a head counts as having announced it, so the RESPONDED
+        # test below suppresses a follow-up for it. Without this the head-
+        # unchanged guard only defers the duplicate by one cycle: the row
+        # rebuild writes this SHA into the state, so next cycle the guard
+        # passes and RESPONDED fires about a head whose first review is
+        # probably still running.
+        flag="$sha"
       elif [ "$known" != "$sha" ]; then
         echo "NEW HEAD $repo#$num ($ref): ${known:0:7} -> ${sha:0:7} — needs an exact-head review"
+        flag="$sha"
       fi
       # Only when the head is known and unchanged — that is, when neither of
       # the two events above fired for this pull request. RESPONDED exists for
