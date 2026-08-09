@@ -61,6 +61,50 @@ while true; do
       continue
     fi
 
+    # A verdict is outstanding work even with no thread attached to it. A
+    # reviewer may put every finding in the review summary body and open no
+    # inline thread at all, and then the thread query below is correctly
+    # silent while the pull request sits blocked at CHANGES_REQUESTED. Watching
+    # threads alone reads that as "nothing outstanding", which is the one
+    # reading that must never be wrong. Asked per repository rather than per
+    # pull request, because one query answers for all of them.
+    if ! verdicts=$(gh api graphql -f query='
+      query($o:String!,$r:String!){ repository(owner:$o,name:$r){
+        pullRequests(states:OPEN, first:100){ nodes{
+          number reviewDecision
+          latestReviews(first:20){ nodes{
+            state author{login} body commit{oid} } } } } } }' \
+      -f o="$owner" -f r="$name" \
+      --jq '.data.repository.pullRequests.nodes[]
+            | select(.reviewDecision == "CHANGES_REQUESTED")
+            | . as $pr | .latestReviews.nodes[]
+            | select(.state == "CHANGES_REQUESTED")
+            | "\($pr.number)\t\(.author.login)\t\(.commit.oid)\t\(.body // "" | gsub("[\r\n]+"; " ") | .[0:130])"' \
+      2>/dev/null); then
+      carried=$(awk -v s="$slug" '$1 ~ /^verdict:/ && $2==s' "$STATE" 2>/dev/null || true)
+      [ -n "$carried" ] && new_state="$new_state$carried
+"
+    else
+      while IFS=$'\t' read -r vn vwho vsha vsnip; do
+        [ -n "${vn:-}" ] || continue
+        # Keyed on author and reviewed SHA, so a re-review of a new head is a
+        # new row and announces immediately rather than waiting out --renotify.
+        vid="verdict:$vwho:$vsha"
+        last=$(awk -v t="$vid" '$1==t {print $4}' "$STATE" 2>/dev/null)
+        if [ -z "$last" ]; then
+          echo "VERDICT $slug#$vn CHANGES_REQUESTED on ${vsha:0:8} [$vwho] — $vsnip"
+          last=$now
+        elif [ $((now - last)) -ge "$RENOTIFY" ]; then
+          echo "VERDICT (still open) $slug#$vn CHANGES_REQUESTED on ${vsha:0:8} [$vwho] — $vsnip"
+          last=$now
+        fi
+        new_state="$new_state$vid $slug $vn $last
+"
+      done <<EOF
+$verdicts
+EOF
+    fi
+
     for n in $prs; do
       if ! threads=$(gh api graphql -f query='
         query($o:String!,$r:String!,$n:Int!){ repository(owner:$o,name:$r){
@@ -80,7 +124,9 @@ while true; do
         # That is a flood, on a repository whose API is already flaky, and
         # Monitor stops a watcher that produces too many events — leaving the
         # fix loop deaf while its skill reads silence as "nothing outstanding".
-        carried=$(awk -v s="$slug" -v p="$n" '$2==s && $3==p' "$STATE" 2>/dev/null || true)
+        # Thread rows only. This repository's verdict rows were already
+        # rebuilt above, so carrying them again here would duplicate them.
+        carried=$(awk -v s="$slug" -v p="$n" '$1 !~ /^verdict:/ && $2==s && $3==p' "$STATE" 2>/dev/null || true)
         [ -n "$carried" ] && new_state="$new_state$carried
 "
         continue
