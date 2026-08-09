@@ -6,6 +6,8 @@
 #
 #   FINDING   an unresolved review thread that has not been announced recently
 #   VERDICT   a pull request sitting at CHANGES_REQUESTED, thread or no thread
+#   REVIEW    a submitted review carrying a body without a verdict — the shape
+#             Codex and Bugbot post, which never moves reviewDecision
 #
 # This watch is deliberately **level-triggered**: it reports what is currently
 # unresolved rather than what just changed. An edge-triggered watch loses a
@@ -152,7 +154,7 @@ EOF
         # fix loop deaf while its skill reads silence as "nothing outstanding".
         # Thread rows only. This repository's verdict rows were already
         # rebuilt above, so carrying them again here would duplicate them.
-        carried=$(awk -v s="$slug" -v p="$n" '$1 !~ /^verdict:/ && $2==s && $3==p' "$STATE" 2>/dev/null || true)
+        carried=$(awk -v s="$slug" -v p="$n" '$1 !~ /^(verdict:|review:)/ && $2==s && $3==p' "$STATE" 2>/dev/null || true)
         [ -n "$carried" ] && new_state="$new_state$carried
 "
         continue
@@ -173,6 +175,47 @@ EOF
       done <<EOF
 $threads
 EOF
+
+      # A review can carry findings and still never be a verdict. Codex and
+      # Bugbot submit COMMENTED reviews, so reviewDecision never moves and the
+      # verdict query is blind to them; their findings are seen only when they
+      # arrive as inline threads, and a body-only review — a failed anchor, a
+      # summary with no thread under it — would otherwise vanish without a
+      # trace. REST rather than GraphQL, and per pull request rather than per
+      # repository, because a reviews connection can only be windowed and the
+      # window is exactly the trap: every reply the fix loop posts inside a
+      # thread files an empty COMMENTED review, so `last:10` returns ten
+      # replies and the bot review has been displaced — the latestReviews
+      # failure again, one query over. One line per review, keyed on author
+      # and reviewed SHA the way verdicts are. Never re-announced: a COMMENTED
+      # review has no resolved state to clear, so "(still open)" would be a
+      # reminder with no off switch. Bodies empty once HTML comments are
+      # stripped are skipped, which is also what keeps the loop's own replies
+      # from coming back to it as work.
+      if ! reviews=$(gh api "repos/$slug/pulls/$n/reviews" --paginate \
+        --jq '.[] | select(.state == "COMMENTED")
+              | (.body // "" | gsub("<!--([^-]|-[^-]|--[^>])*-->"; "") | gsub("<[^>]*>"; "") | gsub("[\r\n]+"; " ")) as $body
+              | select(($body | gsub("[[:space:]]+"; "")) != "")
+              | "\(.user.login)\t\(.commit_id)\t\($body[0:130])"' \
+        2>/dev/null); then
+        carried=$(awk -v s="$slug" -v p="$n" '$1 ~ /^review:/ && $2==s && $3==p' "$STATE" 2>/dev/null || true)
+        [ -n "$carried" ] && new_state="$new_state$carried
+"
+      else
+        while IFS=$'\t' read -r cwho csha csnip; do
+          [ -n "${cwho:-}" ] || continue
+          cid="review:$cwho:$csha"
+          last=$(awk -v t="$cid" '$1==t {print $4}' "$STATE" 2>/dev/null)
+          if [ -z "$last" ]; then
+            echo "REVIEW $slug#$n by [$cwho] on ${csha:0:8} — $csnip"
+            last=$now
+          fi
+          new_state="$new_state$cid $slug $n $last
+"
+        done <<REVEOF
+$reviews
+REVEOF
+      fi
     done
   done
 
