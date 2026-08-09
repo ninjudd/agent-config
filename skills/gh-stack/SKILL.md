@@ -12,6 +12,8 @@ name: gh-stack
 ---
 # gh-stack
 
+> **Vendored from `github/gh-stack` at `v0.1.0`, with deliberate local edits.** Rule 3 and rule 11 below are not upstream's: rule 3 replaces the auto-generated PR body, and rule 11 turns upstream's "use `gh stack merge --yes`" into documentation, because `AGENTS.md` reserves merging for the user. A refresh from upstream reintroduces both — diff before taking it.
+
 `gh stack` is a [GitHub CLI](https://cli.github.com/) extension for managing **stacked branches and pull requests**. A stack is an ordered list of branches where each branch builds on the one below it, rooted on a trunk branch (typically the repo's default branch). Each branch maps to one PR whose base is the branch below it, so reviewers see only the diff for that layer.
 
 ```
@@ -62,7 +64,7 @@ git config remote.pushDefault origin     # if multiple remotes exist (skips remo
 8. **Use standard `git add` and `git commit` for staging and committing.** This gives you full control over which changes go into each branch. The `-Am` shortcut is available but should not be the default approach—stacked PRs are most effective when each branch contains a deliberate, logical set of changes.
 9. **Navigate down the stack when you need to change a lower layer.** If you're working on a frontend branch and realize you need API changes, don't hack around it at the current layer. Navigate to the appropriate branch (`gh stack down`, `gh stack checkout`, or `gh stack bottom`), make and commit the changes there, run `gh stack rebase --upstack`, then navigate back up to continue.
 10. **Use `gh stack link` for external tool workflows.** When branches are managed by an external tool (jj, Sapling, etc.), use `gh stack link branch-a branch-b`. `link` does not rely on local tracking state and is intended for API-driven PR and stack management. Provide at least two branches/PRs to create or update a stack, or a stack number followed by the new branches/PRs to append them to the top of an existing stack (e.g. `gh stack link 7 branch-c`).
-11. **Use `gh stack merge --yes` to merge stacked PRs.** `gh pr merge` does not work with stacked PRs. In a non-interactive terminal `gh stack merge` runs without prompting and merges the entire stack (bottom to top) atomically; pass `--yes` to be explicit. Scope the merge by passing a pull request number (`gh stack merge 42 --yes` merges everything up to and including PR #42) or a stack number (`gh stack merge 7 --yes`, which needs no local checkout). Choose the method with `--squash`, `--rebase`, `--merge`, or `--merge-method <method>`; without one, the last-used method is used. The merge is all-or-nothing — if any PR can't be merged, none are, and the failure reason is reported. Only basic pull request state is checked before merging (open and not a draft); bypassing merge requirements is not supported for stacks. If the base branch uses a merge queue, the stack is added to the queue instead of merging directly: the queue chooses the merge method (any method you pass is ignored with a warning), and the pull requests are added to the queue together but merge as the queue processes them, so they may land in separate groups rather than all at once.
+11. **Never merge. `gh stack merge` is documented here, not for you to run.** `AGENTS.md` reserves merging in its strongest terms — "Open pull requests; never merge them," and on stacks specifically, "A stack can be merged in one click, all layers together — so it is exactly the button not to press." End at `gh stack submit --auto --open` and hand over the URLs. The mechanics are here because recognizing the command still matters: `gh pr merge` does not work on a stacked PR, so `gh stack merge` is what the user will reach for, and reading their transcript means knowing what it did. In a non-interactive terminal it runs without prompting and merges the entire stack (bottom to top) atomically, so there is no half-merge to notice and stop; `--yes` only makes explicit what a non-interactive run does anyway. Scope the merge by passing a pull request number (`gh stack merge 42 --yes` merges everything up to and including PR #42) or a stack number (`gh stack merge 7 --yes`, which needs no local checkout). Choose the method with `--squash`, `--rebase`, `--merge`, or `--merge-method <method>`; without one, the last-used method is used. The merge is all-or-nothing — if any PR can't be merged, none are, and the failure reason is reported. Only basic pull request state is checked before merging (open and not a draft); bypassing merge requirements is not supported for stacks. If the base branch uses a merge queue, the stack is added to the queue instead of merging directly: the queue chooses the merge method (any method you pass is ignored with a warning), and the pull requests are added to the queue together but merge as the queue processes them, so they may land in separate groups rather than all at once.
 
 **Never do any of the following — each triggers an interactive prompt or TUI that will hang:**
 - ❌ `gh stack view` or `gh stack view --short` — always use `gh stack view --json`
@@ -170,10 +172,8 @@ Small, incidental fixes (e.g., fixing a typo you noticed) can go in the current 
 | Check out by branch (local only) | `gh stack checkout feature-auth` |
 | Tear down the current stack to restructure it | `gh stack unstack` |
 | Tear down a specific stack by number | `gh stack unstack 7` |
-| Merge the whole current stack | `gh stack merge --yes` |
-| Merge a stack by number | `gh stack merge 7 --yes` |
-| Merge up to a specific PR | `gh stack merge 42 --yes` |
-| Merge with a specific method | `gh stack merge --yes --squash` |
+
+The merge commands are deliberately not in that table, because it is a list of things to run and they are not: `gh stack merge --yes` (whole current stack), `gh stack merge 7 --yes` (a stack by number), `gh stack merge 42 --yes` (up to and including a PR), `gh stack merge --yes --squash` (with a specific method). Merging is the user's — see rule 11.
 
 ---
 
