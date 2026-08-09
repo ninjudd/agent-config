@@ -29,7 +29,7 @@ A request to "also cover" another repository is a request to run this skill **th
 
 **Armed first, and stays armed.** The failure this ordering exists to prevent is the quiet one: a finding is waiting, or the user reports a live bug, so that gets taken first — every step defensible, the watcher never started, and the loop only ever runs once. Foreground work is expected and is never a reason to defer arming. If the watcher is running, work freely; if it is not, start it before anything else.
 
-**If the watcher stops, restart it.** Its ending is not the loop's ending — only the user ends the loop. When a monitor times out, dies, or stops for any reason other than the user saying so, re-arm it and re-baseline against the threads as they now stand. And when asked what the loop is doing, check that it is genuinely alive before answering rather than inferring it from having started one earlier.
+**If the watcher stops, restart it.** Its ending is not the loop's ending — only the user ends the loop. When a monitor times out, dies, or stops for any reason other than the user saying so, re-arm it and re-baseline against the threads as they now stand. **Check first that one is not already running** — a watcher that survived whatever you thought killed it is still delivering, and arming a second on top of it doubles every notification for this repository, which reads as a burst of new findings rather than as duplicates. Check with `pgrep -f "watch-threads.sh.*<owner>/<repo>"` before starting, not after wondering why everything arrived twice — and scope it to the repository, because a bare `pgrep -f watch-threads.sh` matches the watchers other sessions are legitimately running for other repositories, and reports a conflict that is not one. And when asked what the loop is doing, check that it is genuinely alive before answering rather than inferring it from having started one earlier.
 
 ## Wait for findings
 
@@ -57,7 +57,7 @@ For each unresolved finding, in the order posted:
 
 1. **Verify the claim against the code before acting on it.** Reviewers are usually right, and occasionally right about the wrong reason. If the reasoning does not hold but the fix does, say so plainly in the reply. If the finding is simply wrong, do not fix it — see "Findings you decline". If it is right that something is broken but the choice of fix is the user's, stop and ask rather than picking one to keep the loop moving.
 2. Reproduce it. A finding worth fixing is worth a failing test, an error message, or a measurement that shows the defect exists.
-3. Implement the fix, matching the surrounding code's idiom, comment density, and naming.
+3. Implement the fix, matching the surrounding code's idiom, comment density, and naming. **Before inserting at an anchor, read the lines immediately above it.** An anchor is usually the first line of something, and inserting "before" it lands inside whatever precedes it: an anchor below a `#[test]` or `@override` attribute absorbs the attribute, and one inside a doc comment splits the comment around the new code. Both compile, and the first silently stops running a test while leaving the suite green — a passing suite is not evidence the insertion landed where it was meant to.
 4. **Prove the regression test catches it.** Run the new test against the unfixed code and confirm it fails, then restore the fix. A test that passes either way documents nothing.
 5. Run the repository's full validation gate — its tests, linter, and formatter, whatever `AGENTS.md` names — before pushing anything.
 6. Keep each finding's fix in its own commit where they are independent, so a reply can name the commit that carries it.
@@ -83,6 +83,8 @@ When a rebase renames the commits, name the SHA on the branch that owns the fix,
 Replies and PR bodies render with GitHub's hard-line-break extension, where every newline inside a paragraph becomes a literal `<br>`. Write them as unwrapped paragraphs, one line per paragraph, however long.
 
 If the PR body no longer describes what the branch does — a squash merge takes it verbatim as the commit message — update it to cover the new commits.
+
+**A fix commit dates the description, and the Testing section goes stale first.** Test counts, enumerated test names, line numbers, and "you should see" output are all claims about the branch as it was when the body was written, and each fix quietly falsifies some of them: "five new tests" becomes six, a named test gets renamed, output gains a line. None of it fails loudly — the reader finds out by running a command that no longer matches. Re-read the Testing section after each batch of fixes rather than only before handing over, and re-run the commands it names, because a command that errors in a pull request body is worse than no instructions at all.
 
 ## Findings you decline
 
