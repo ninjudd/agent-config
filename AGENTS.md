@@ -14,17 +14,33 @@ own `AGENTS.md` lists the docs it actually has.
 - Plans are cited by section (`onboarding.md §7`), including from code comments,
   so renumbering a section silently breaks references. Add new sections at the
   end.
-- A plan whose status line is stale is worse than one with no status at all.
-- The lists and status lines ride the pull request that changes what they say.
-  The one that completes a plan marks it shipped and edits `now.md` in the same
-  diff, so the squash lands code and docs as one commit; a plan delivered in
-  slices closes in its last one, not its first. What the `now.md` edit *is*
-  varies by repository, so read the file rather than assuming: `msg` empties the
-  list back to "Nothing in flight.", while `modal`, `field` and `fyra`
-  deliberately keep the shipped line and attach the condition for removing it
-  later. Do not plan a separate close-out pull request after the merge — it
-  spends a review cycle saying what the merge already said. Correcting one that
-  was genuinely forgotten is a different thing and is fine.
+- Every document in `all/` opens with YAML frontmatter carrying `status:` — one
+  keyword from a fixed set, adopted from `triangle/app`: `Draft` (written,
+  implementation not started), `Active` (in progress), `Blocked` (waiting on a
+  dependency or decision), `Stalled` (lost momentum, not formally dropped),
+  `Shipped`, `Superseded`, `Abandoned`, `Reference` (a standing document with no
+  build lifecycle). Add `owner:` only where a repo has more than one person to
+  ask. The keyword is the state of record; the *why* stays prose in the body, so
+  a repo's old `**Status:**` line keeps its story and the frontmatter carries
+  the claim.
+- `Draft` is load-bearing: it declares the plan is not yet claiming to be
+  executable, so open questions in a Draft plan do not block its pull requests
+  from merging. The pull request that flips a plan out of Draft is the one
+  making the readiness claim, and it answers for every question still open at
+  that moment. The review mechanics live in the start-review-loop skill; this
+  bullet is why they are shaped that way.
+- A plan whose status frontmatter is stale is worse than one with no status at
+  all.
+- The lists and status frontmatter ride the pull request that changes what they
+  say. The one that completes a plan sets `status: Shipped` and edits `now.md`
+  in the same diff, so the squash lands code and docs as one commit; a plan
+  delivered in slices closes in its last one, not its first. What the `now.md`
+  edit *is* varies by repository, so read the file rather than assuming: `msg`
+  empties the list back to "Nothing in flight.", while `modal`, `field` and
+  `fyra` deliberately keep the shipped line and attach the condition for
+  removing it later. Do not plan a separate close-out pull request after the
+  merge — it spends a review cycle saying what the merge already said.
+  Correcting one that was genuinely forgotten is a different thing and is fine.
 
 ## Pull requests
 
