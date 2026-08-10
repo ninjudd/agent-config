@@ -53,29 +53,59 @@ requests: two changes citing different plans belong together when they share a
 rationale, when one is unusable until the other lands, or when verifying the
 second means re-running the first. What replaces line count as the ceiling is
 reviewability — too big is when a reviewer would be holding two unrelated
-arguments at once, or when half of it could ship and be used while the rest is
-still being written. Short of that, fold the follow-on into the pull request
-that unblocked it: the one-file move, the doc sweep, the retirement its
-predecessor made possible. A five-file, twenty-insertion pull request split off
+arguments at once, or when one half would still be worth shipping if the other
+were abandoned. That second test is about independent value, not about what
+lands first, and the examples below turn on the difference.
+
+Short of that ceiling, fold the follow-on into the pull request that unblocked
+it: the one-file move, the doc sweep, the retirement its predecessor made
+possible. Each of those could technically go out on its own, which is why the
+weaker reading of the ceiling would split them, and none is worth anything
+alone — a sweep documenting a change that has not shipped, a retirement of
+something still in use. That is sequencing, not independence, and sequencing is
+not a reason to split. A five-file, twenty-insertion pull request split off
 only because it belonged to a different plan's chunk is the shape to stop
 producing — its one claim could not be verified without the pull request
 underneath it, so the review had to hold both anyway.
 
-That ceiling is also the test for whether to stack. A stack is the right shape
-exactly when work crosses it and therefore cannot be one pull request, so this
-paragraph decides *whether* to stack and the section below decides *how*. It
+Folding in is not blocked by the rule that work ends at `gh pr create`. What
+that reserves is the merge, not the branch: a pull request under review still
+takes commits — it is how findings get fixed — so a follow-on belonging to
+the same argument goes onto the same branch, costing the extra review cycle
+this section already argues is cheaper than a second pull request. Say in the
+description that the scope grew, because pushing dismisses any approval
+standing against the old head, and that dismissal is the cost being spent.
+
+An *unrelated* change found after the push is the other half of the ceiling,
+and it is what stacking is for: folding it in would put a second argument in
+front of a reviewer already holding one, so it becomes its own pull request,
+stacked on the first where it depends on it. That is not licence to push a thin
+pull request and stack the rest behind it. Sizing is settled before opening —
+the first one still has to have been big enough on its own — and stacking only
+handles what genuinely arrives afterwards. Once I have merged, the predecessor
+is gone and the follow-on is simply its own pull request: the ordinary case,
+not a failure of this rule.
+
+More generally, that ceiling is the test for whether to stack at all, not only
+for work that arrives late: a stack is the right shape exactly when work
+crosses it and therefore cannot be one pull request. This section decides
+*whether* to stack and the section below decides *how*. It
 governs the vendored `gh-stack` skill too, which opens by recommending "a chain
 of small, reviewable PRs" and whose rule 7 sizes layers from dependency order
 before any code exists — upstream's framing, not this repository's. Dependency
 order still decides what order the layers go in; it does not decide that there
 is more than one.
 
-My repos are configured alike, and the ruleset is what enforces all of the
-above: main takes no direct pushes, history stays linear, every review thread
-must be resolved before a merge, and merges are squashed with the PR title and
-body taken as the commit message verbatim. So write the title and body as the
-commit message they are about to become — title in the imperative, body
-explaining why rather than what.
+My repos are configured alike, and a ruleset enforces some of the above but not
+most of it, so do not read it as backing everything it follows. What it
+enforces: main takes no direct pushes, history stays linear, every review
+thread must be resolved before a merge, and merges are squashed with the PR
+title and body taken as the commit message verbatim. What it cannot: never
+merging, the draft policy, and every sizing judgement above are conventions I
+check by hand — which is exactly why the merge is my checkpoint rather than
+something I could delegate to GitHub. So write the title and body as the commit
+message they are about to become — title in the imperative, body explaining
+why rather than what.
 
 That collides with the wrapping rule at the end of this file, and the wrapping
 rule wins. PR bodies go up unwrapped, so the squashed commit message inherits
