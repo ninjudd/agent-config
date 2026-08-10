@@ -15,6 +15,16 @@ own `AGENTS.md` lists the docs it actually has.
   so renumbering a section silently breaks references. Add new sections at the
   end.
 - A plan whose status line is stale is worse than one with no status at all.
+- The lists and status lines ride the pull request that changes what they say.
+  The one that completes a plan marks it shipped and edits `now.md` in the same
+  diff, so the squash lands code and docs as one commit; a plan delivered in
+  slices closes in its last one, not its first. What the `now.md` edit *is*
+  varies by repository, so read the file rather than assuming: `msg` empties the
+  list back to "Nothing in flight.", while `modal`, `field` and `fyra`
+  deliberately keep the shipped line and attach the condition for removing it
+  later. Do not plan a separate close-out pull request after the merge — it
+  spends a review cycle saying what the merge already said. Correcting one that
+  was genuinely forgotten is a different thing and is fine.
 
 ## Pull requests
 
@@ -50,6 +60,15 @@ predecessor made possible. A five-file, twenty-insertion pull request split off
 only because it belonged to a different plan's chunk is the shape to stop
 producing — its one claim could not be verified without the pull request
 underneath it, so the review had to hold both anyway.
+
+That ceiling is also the test for whether to stack. A stack is the right shape
+exactly when work crosses it and therefore cannot be one pull request, so this
+paragraph decides *whether* to stack and the section below decides *how*. It
+governs the vendored `gh-stack` skill too, which opens by recommending "a chain
+of small, reviewable PRs" and whose rule 7 sizes layers from dependency order
+before any code exists — upstream's framing, not this repository's. Dependency
+order still decides what order the layers go in; it does not decide that there
+is more than one.
 
 My repos are configured alike, and the ruleset is what enforces all of the
 above: main takes no direct pushes, history stays linear, every review thread
@@ -96,20 +115,18 @@ primitive rather than a convention to imitate.
 
 **Create it as a stack.** The CLI is an official extension and is not installed
 by default: `gh extension install github/gh-stack`, then `gh stack init <name>`,
-`gh stack add <branch>`, `gh stack submit --auto --open`. Both flags are
-load-bearing for an unattended run, and neither omission errors or hangs. A
-non-interactive terminal already implies `--auto`, so the editor never opens;
-`--auto` in turn creates every new pull request as a **draft** unless `--open`
-is passed, which the ready-by-default rule above forbids. Nothing in the output
-says "draft", and running the same command by hand does not reproduce it,
-because the interactive editor defaults to ready for review. `--open` marks
-existing pull requests ready as well as new ones, so check every one the submit
-touched rather than only the one being watched; `gh pr ready <n>` fixes them
-one at a time. The body `submit` generates is wrong for these repos too — a
-hard-wrapped commit message plus a stack footer, both of which a squash would
-make permanent — so replace it per the body rules here. The gh-stack skill
-carries the full non-interactive discipline; load it before running any
-`gh stack` command rather than working from this summary.
+`gh stack add <branch>`, `gh stack submit --auto --open`. `--open` is the
+load-bearing one: an unattended run is already in auto mode whether or not the
+flag is typed, and auto mode creates every new pull request as a **draft**
+unless `--open` is passed, which the ready-by-default rule above forbids.
+Nothing in the output says "draft", and running the command by hand does not
+reproduce it, because the interactive editor defaults to ready for review. Pass
+`--auto` anyway, so the behaviour does not change if the terminal turns out not
+to be what you assumed. Everything else about driving these commands unattended
+belongs to the gh-stack skill — including that `--open` readies *existing*
+pull requests too, so a stack deliberately holding a draft layer needs a
+different sequence. Load that skill before running any `gh stack` command
+rather than working from this summary.
 
 From the web UI, create the child with its base set to the parent's branch and
 choose **Create stack** to link them. Either way the result is what a base
