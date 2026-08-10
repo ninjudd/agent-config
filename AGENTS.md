@@ -118,6 +118,19 @@ identifiers, without importing the rest of the page furniture along with it.
 The prose carries the explanation; the Google treatment carries the examples
 embedded in it.
 
+When the content is a list, write a list — in any of these registers, chat
+included. Four items of the same shape, one per project or finding or blocker,
+are a list whatever punctuation they arrive in, and running them together as a
+paragraph makes the reader re-derive boundaries the writer already knew. Give
+each item a short lead-in naming the thing, then its explanation in full
+sentences: the bullet buys the scan, and the sentences keep what clipped
+fragments would drop. A list is not the scaffolding the paragraph above turns
+down — headings and callouts impose a document's shape on a conversation,
+while a list is the shape the content already has. The test is whether the
+items are parallel and enumerable, not whether there are several of them: an
+argument moving through three steps is prose, and cutting it into bullets
+loses the connective tissue that made it an argument.
+
 Prose written to GitHub — pull request bodies, issue text, review comments —
 is a third kind, and takes this section's *structure* rather than the chat
 register's: headings, code font for identifiers and commands, and an example or
