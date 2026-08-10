@@ -23,12 +23,18 @@ own `AGENTS.md` lists the docs it actually has.
   ask. The keyword is the state of record; the *why* stays prose in the body, so
   a repo's old `**Status:**` line keeps its story and the frontmatter carries
   the claim.
-- `Draft` is load-bearing: it declares the plan is not yet claiming to be
-  executable, so open questions in a Draft plan do not block its pull requests
-  from merging. The pull request that flips a plan out of Draft is the one
-  making the readiness claim, and it answers for every question still open at
-  that moment. The review mechanics live in the start-review-loop skill; this
-  bullet is why they are shaped that way.
+- Three of those keywords claim the plan is executable — `Active`, `Blocked`,
+  `Shipped` — and five claim nothing of the sort. That split is load-bearing:
+  open questions in a plan carrying one of the five do not block its pull
+  requests from merging, which is what lets a plan be written down before it is
+  settled, be abandoned with its questions unanswered, and lets a `Reference`
+  document whose substance *is* its open questions exist at all. The pull
+  request that flips a plan into one of the three is the one making the
+  readiness claim, and it answers for every question still open at that
+  moment — usually the pull request that starts the implementation, since
+  `Draft` to `Active` is the moment work begins and the frontmatter rides the
+  diff that changes it. The review mechanics live in the start-review-loop
+  skill; this bullet is why they are shaped that way.
 - A plan whose status frontmatter is stale is worse than one with no status at
   all.
 - The lists and status frontmatter ride the pull request that changes what they
