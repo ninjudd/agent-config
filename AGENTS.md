@@ -22,15 +22,18 @@ own `AGENTS.md` lists the docs it actually has.
   `triangle/app` runs fourteen folders against far more single files, which is
   the ratio to expect: reach for a folder when a file is unwieldy, not when a
   project sounds important.
-- A folder's entry point is `overview.md`, and that is the only fixed rule
-  inside one. It is what the three lists link to, and what carries the project's
+- A folder's entry point is `README.md`, and that is the only fixed rule inside
+  one. GitHub renders a directory's `README.md` underneath the file listing, so
+  browsing to `all/passkey/` shows the plan; any other name is a file you have
+  to know to click, which is what `overview.md` was until this rule replaced it.
+  It is what the three lists link to, and what carries the project's
   `status:` frontmatter. Everything else is shaped to the work rather than to a
   template: `triangle/app` has grown `design.md`, numbered step documents in
   execution order, `decisions.md`, `progress.md`, a `post-mortem.md`, and
   `impl/` or `reviews/` subfolders, but each emerged from a particular project
   and none is required. Add a document when there is something to put in it.
 - Promoting a file to a folder breaks every inbound reference to
-  `all/<name>.md`, which is now `all/<name>/overview.md`. The promoting pull
+  `all/<name>.md`, which is now `all/<name>/README.md`. The promoting pull
   request sweeps them in the same diff; `rg -n 'all/<name>\.md'` finds them,
   and code comments cite these paths, so this is not only a docs concern. Use
   `rg` because it skips `.git` and gitignored build output wherever it runs,
@@ -42,15 +45,15 @@ own `AGENTS.md` lists the docs it actually has.
   file — `all/passkey/design.md §4` — and the section-numbering rule above
   applies unchanged.
 - Every project in `all/` carries YAML frontmatter with `status:` — on the file
-  when it is a file, on `overview.md` when it is a folder, where it is the
+  when it is a file, on `README.md` when it is a folder, where it is the
   status of the whole project and the documents beside it need none of their
   own. `triangle/app` bears out the "one place" half exactly — thirteen of its
   nested documents carry a status keyword and they are exactly its thirteen
-  `overview.md` files, so nothing beside an overview has ever carried one — but
-  not the entry-point half, and the gap is the honest reason to state this as a
-  rule rather than describe it as practice. Three of its fourteen folders keep
-  a root `design.md` and no `overview.md`: `invite-codes` and
-  `survey-adjustment` push theirs down to `impl/overview.md`, and `doctor-scan`
+  folder entry points, so nothing beside an entry point has ever carried one —
+  but not the entry-point half, and the gap is the honest reason to state this
+  as a rule rather than describe it as practice. Three of its fourteen folders
+  keep a root `design.md` and no entry point at the root: `invite-codes` and
+  `survey-adjustment` push theirs down into `impl/`, and `doctor-scan`
   carries no status anywhere, which is a folder-shaped project the rule above
   says cannot exist. None of the three is on any of the lists, so they are past
   work nobody is going back to fix. It is also what the review gate reads, so a
