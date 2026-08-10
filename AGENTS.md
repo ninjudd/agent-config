@@ -103,7 +103,7 @@ Moving forward only: new documents and new sections use the style, and a
 document being substantially revised converts as part of the revision.
 Existing docs get a cleanup pass later — do not reflow or rewrite one you are
 not otherwise changing. `docs/projects/` keeps its own structural conventions
-(numbered cited sections, the status convention each plan carries, decision
+(numbered cited sections, the status frontmatter each project carries, decision
 records with rejected alternatives); the style governs the prose inside them,
 not their shape.
 
