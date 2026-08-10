@@ -15,6 +15,11 @@ own `AGENTS.md` lists the docs it actually has.
   so renumbering a section silently breaks references. Add new sections at the
   end.
 - A plan whose status line is stale is worse than one with no status at all.
+- The lists and status lines ride the pull request that changes what they say.
+  The PR that ships a piece of work also deletes its line from `now.md` (or
+  restores "Nothing in flight.") and marks the plan shipped, so the squash
+  lands code and docs as one commit. Never open a separate close-out PR after
+  the merge — it spends a review cycle saying what the merge already said.
 
 ## Pull requests
 
