@@ -27,6 +27,30 @@ work-in-progress slice. Use draft status only when the pull request is genuinely
 not ready for review and we intentionally do not want it reviewed yet. Do not
 use draft status merely because more work is planned.
 
+**Lean toward medium-to-large pull requests, not small-to-medium.** Reviewing
+one costs real effort, and that effort is charged per pull request *and per
+review cycle* while barely moving with diff size: resolving the exact head,
+building, running the suite, probing the claims and writing the review cost
+about the same for twenty lines as for three hundred. Two small pull requests
+therefore cost roughly twice what one medium one carrying both does — and a
+second review cycle on a single pull request is cheaper than a second pull
+request, which is the counterintuitive half, because the instinct is to split
+precisely to avoid another round.
+
+So combine by default, and let splitting be the thing that needs an argument.
+Phase chunks and plan sections are for sequencing thought, not for sizing pull
+requests: two changes citing different plans belong together when they share a
+rationale, when one is unusable until the other lands, or when verifying the
+second means re-running the first. What replaces line count as the ceiling is
+reviewability — too big is when a reviewer would be holding two unrelated
+arguments at once, or when half of it could ship and be used while the rest is
+still being written. Short of that, fold the follow-on into the pull request
+that unblocked it: the one-file move, the doc sweep, the retirement its
+predecessor made possible. A five-file, twenty-insertion pull request split off
+only because it belonged to a different plan's chunk is the shape to stop
+producing — its one claim could not be verified without the pull request
+underneath it, so the review had to hold both anyway.
+
 My repos are configured alike, and the ruleset is what enforces all of the
 above: main takes no direct pushes, history stays linear, every review thread
 must be resolved before a merge, and merges are squashed with the PR title and
