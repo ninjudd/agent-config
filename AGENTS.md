@@ -31,10 +31,13 @@ own `AGENTS.md` lists the docs it actually has.
   and none is required. Add a document when there is something to put in it.
 - Promoting a file to a folder breaks every inbound reference to
   `all/<name>.md`, which is now `all/<name>/overview.md`. The promoting pull
-  request sweeps them in the same diff; `grep -rn 'all/<name>\.md'` finds them,
-  and code comments cite these paths, so this is not only a docs concern. Cite
-  into a folder the same way as into a file — `all/passkey/design.md §4` — and
-  the section-numbering rule above applies unchanged.
+  request sweeps them in the same diff; `rg -n 'all/<name>\.md'` finds them,
+  and code comments cite these paths, so this is not only a docs concern. Use
+  `rg` rather than `grep -r`, which descends into `.git` and build output: on
+  `triangle/app` the same sweep is 86ms against over two minutes, and the slow
+  one is the command a reader reaches for by habit. Cite into a folder the
+  same way as into a file — `all/passkey/design.md §4` — and the
+  section-numbering rule above applies unchanged.
 - Every project in `all/` carries YAML frontmatter with `status:` — on the file
   when it is a file, on `overview.md` when it is a folder, where it is the
   status of the whole project and the documents beside it need none of their
