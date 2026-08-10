@@ -119,13 +119,23 @@ The prose carries the explanation; the Google treatment carries the examples
 embedded in it.
 
 Prose written to GitHub — pull request bodies, issue text, review comments —
-is a third kind, and takes the `docs/` register rather than the chat one. It is
-written to be scanned, returned to and acted on rather than read once, and this
-file already requires scaffolding in it: every description closes with a
-**Testing** section, which is exactly the furniture the chat register turns
-down. So read "no headings or callouts" as a rule about talking to a person,
-not about anything that renders on GitHub. How that text wraps is a separate
-question, answered by the hard-wrapping rule near the end of this file.
+is a third kind, and takes this section's *structure* rather than the chat
+register's: headings, code font for identifiers and commands, and an example or
+command transcript wherever one beats a paragraph. It is written to be scanned,
+returned to and acted on rather than read once, and this file already requires
+scaffolding in it: every description closes with a **Testing** section, which
+is exactly the furniture the chat register turns down. So read "no headings or
+callouts" as a rule about talking to a person, not about anything that renders
+on GitHub.
+
+Voice does not come with it, at least not into a pull request body, because the
+squash turns that body into a commit message: the rule below wins there —
+imperative title, and prose explaining why rather than what — over the second
+person, present tense and task-oriented sections the `docs/` register asks for.
+A body argues where a document instructs, and the two cannot both be the rule
+for the same text. Issue comments and review comments carry no such constraint
+and can take the register whole. How any of it wraps is a separate question
+again, answered by the hard-wrapping rule near the end of this file.
 
 ## Pull requests
 
