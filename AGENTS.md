@@ -41,9 +41,16 @@ own `AGENTS.md` lists the docs it actually has.
 - Every project in `all/` carries YAML frontmatter with `status:` — on the file
   when it is a file, on `overview.md` when it is a folder, where it is the
   status of the whole project and the documents beside it need none of their
-  own. That is `triangle/app`'s practice rather than an invention here: eleven
-  of its nested documents carry a status keyword, and they are exactly the
-  eleven `overview.md` files. It is also what the review gate reads, so a
+  own. `triangle/app` bears out the "one place" half exactly — thirteen of its
+  nested documents carry a status keyword and they are exactly its thirteen
+  `overview.md` files, so nothing beside an overview has ever carried one — but
+  not the entry-point half, and the gap is the honest reason to state this as a
+  rule rather than describe it as practice. Three of its fourteen folders keep
+  a root `design.md` and no `overview.md`: `invite-codes` and
+  `survey-adjustment` push theirs down to `impl/overview.md`, and `doctor-scan`
+  carries no status anywhere, which is a folder-shaped project the rule above
+  says cannot exist. None of the three is on any of the lists, so they are past
+  work nobody is going back to fix. It is also what the review gate reads, so a
   folder-shaped project has one answer to "is this plan claiming readiness"
   rather than one per document. The keyword is one from a fixed set, adopted
   from the same repo: `Draft` (written, implementation not started), `Active`
