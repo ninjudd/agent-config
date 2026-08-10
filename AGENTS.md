@@ -96,11 +96,26 @@ primitive rather than a convention to imitate.
 
 **Create it as a stack.** The CLI is an official extension and is not installed
 by default: `gh extension install github/gh-stack`, then `gh stack init <name>`,
-`gh stack add <branch>`, `gh stack submit`. From the web UI, create the child
-with its base set to the parent's branch and choose **Create stack** to link
-them. Either way the result is what a base pointer alone does not give you: a
-stack icon and a stack map in each pull request's merge box, listing every
-layer with its status and letting a reviewer move between them.
+`gh stack add <branch>`, `gh stack submit --auto --open`. Both flags are
+load-bearing for an unattended run, and neither omission errors or hangs. A
+non-interactive terminal already implies `--auto`, so the editor never opens;
+`--auto` in turn creates every new pull request as a **draft** unless `--open`
+is passed, which the ready-by-default rule above forbids. Nothing in the output
+says "draft", and running the same command by hand does not reproduce it,
+because the interactive editor defaults to ready for review. `--open` marks
+existing pull requests ready as well as new ones, so check every one the submit
+touched rather than only the one being watched; `gh pr ready <n>` fixes them
+one at a time. The body `submit` generates is wrong for these repos too — a
+hard-wrapped commit message plus a stack footer, both of which a squash would
+make permanent — so replace it per the body rules here. The gh-stack skill
+carries the full non-interactive discipline; load it before running any
+`gh stack` command rather than working from this summary.
+
+From the web UI, create the child with its base set to the parent's branch and
+choose **Create stack** to link them. Either way the result is what a base
+pointer alone does not give you: a stack icon and a stack map in each pull
+request's merge box, listing every layer with its status and letting a reviewer
+move between them.
 
 That map is the reason to bother. A reviewer opening a child sees a correct diff
 either way, but only a real stack tells them where they are in the series and
