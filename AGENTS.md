@@ -103,8 +103,9 @@ Moving forward only: new documents and new sections use the style, and a
 document being substantially revised converts as part of the revision.
 Existing docs get a cleanup pass later — do not reflow or rewrite one you are
 not otherwise changing. `docs/projects/` keeps its own structural conventions
-(status frontmatter, numbered cited sections, decision records with rejected
-alternatives); the style governs the prose inside them, not their shape.
+(numbered cited sections, the status convention each plan carries, decision
+records with rejected alternatives); the style governs the prose inside them,
+not their shape.
 
 Chat gets a different mix. Explain a complicated concept in ISO 24495-1
 plain language: prose organized around what the reader needs, leading with
@@ -116,6 +117,15 @@ a fenced snippet or command transcript with real names and code font for
 identifiers, without importing the rest of the page furniture along with it.
 The prose carries the explanation; the Google treatment carries the examples
 embedded in it.
+
+Prose written to GitHub — pull request bodies, issue text, review comments —
+is a third kind, and takes the `docs/` register rather than the chat one. It is
+written to be scanned, returned to and acted on rather than read once, and this
+file already requires structure in it: every description closes with a
+`## Testing` heading. So read "no headings or callouts" as a rule about talking
+to a person, not about anything that renders on GitHub. How that text wraps is
+a separate question, answered by the hard-wrapping rule near the end of this
+file.
 
 ## Pull requests
 
