@@ -89,6 +89,34 @@ own `AGENTS.md` lists the docs it actually has.
   merge — it spends a review cycle saying what the merge already said.
   Correcting one that was genuinely forgotten is a different thing and is fine.
 
+## Docs are written in Google developer documentation style
+
+Write `docs/` in the register of the Google developer documentation style
+guide (https://developers.google.com/style): second person, present tense,
+active voice, sentence-case headings, code font for identifiers and commands,
+short task-oriented sections, and an example or command transcript wherever
+one beats another paragraph of prose. Adopted 2026-08-10 after comparing
+registers (ASD-STE100 → ISO 24495-1 plain language → this) on Field's sends
+design; this one kept the precision without the stiffness.
+
+Moving forward only: new documents and new sections use the style, and a
+document being substantially revised converts as part of the revision.
+Existing docs get a cleanup pass later — do not reflow or rewrite one you are
+not otherwise changing. `docs/projects/` keeps its own structural conventions
+(status frontmatter, numbered cited sections, decision records with rejected
+alternatives); the style governs the prose inside them, not their shape.
+
+Chat gets a different mix. Explain a complicated concept in ISO 24495-1
+plain language: prose organized around what the reader needs, leading with
+what the thing is and what they do with it, ordinary paragraphs, no headings
+or callouts — document scaffolding reads as a manual page dropped into a
+conversation. When an example is warranted — and a short one often beats a
+third paragraph of abstraction — render it the Google way inside that prose:
+a fenced snippet or command transcript with real names and code font for
+identifiers, without importing the rest of the page furniture along with it.
+The prose carries the explanation; the Google treatment carries the examples
+embedded in it.
+
 ## Pull requests
 
 **Open pull requests; never merge them.** Merging is my review checkpoint, no
