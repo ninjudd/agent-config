@@ -121,11 +121,11 @@ embedded in it.
 Prose written to GitHub — pull request bodies, issue text, review comments —
 is a third kind, and takes the `docs/` register rather than the chat one. It is
 written to be scanned, returned to and acted on rather than read once, and this
-file already requires structure in it: every description closes with a
-`## Testing` heading. So read "no headings or callouts" as a rule about talking
-to a person, not about anything that renders on GitHub. How that text wraps is
-a separate question, answered by the hard-wrapping rule near the end of this
-file.
+file already requires scaffolding in it: every description closes with a
+**Testing** section, which is exactly the furniture the chat register turns
+down. So read "no headings or callouts" as a rule about talking to a person,
+not about anything that renders on GitHub. How that text wraps is a separate
+question, answered by the hard-wrapping rule near the end of this file.
 
 ## Pull requests
 
