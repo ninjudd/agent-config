@@ -12,7 +12,7 @@ name: gh-stack
 ---
 # gh-stack
 
-> **Vendored from `github/gh-stack` at `v0.1.0`, with deliberate local edits.** Rules 2, 3 and 11 below are not upstream's as written: rule 2 corrects which flag actually causes drafts and says what `--open` does to existing PRs, rule 3 replaces the auto-generated PR body, and rule 11 turns upstream's "use `gh stack merge --yes`" into documentation, because `AGENTS.md` reserves merging for the user. **On sizing, upstream's framing stands but does not govern.** "Break a large change into a chain of small, reviewable PRs" and rule 7's dependency-ordered layers describe how to build a stack once there is going to be one; whether the work should be a stack at all is decided by `AGENTS.md`, which leans toward combining and treats splitting as the thing needing an argument. A refresh from upstream reintroduces all of this — diff before taking it.
+> **Vendored from `github/gh-stack` at `v0.1.0`, with deliberate local edits.** Rules 2, 3 and 11 below are not upstream's as written: rule 2 corrects which flag actually causes drafts and says what `--open` does to existing PRs, rule 3 replaces the auto-generated PR body, and rule 11 turns upstream's "use `gh stack merge --yes`" into documentation, because `AGENTS.md` reserves merging for the user. **On sizing, upstream's ordering guidance stands and its sizing framing is replaced**, in the body rather than by a note here, because a banner is read once and a trigger list is read at the moment of the decision. Rule 7's dependency-ordered layers are genuinely about *how* to build a stack and are untouched. Edited: the trigger under "When to use this skill", which made wanting small PRs the reason to stack; the tests-and-documentation entry under "When to create a new branch", which made a doc sweep a different concern; and "small, logical piece" under "One stack, one story". Those three answered *whether* to stack, and `AGENTS.md` decides that — it leans toward combining and treats splitting as the thing needing an argument. A refresh from upstream reintroduces all of this — diff before taking it.
 
 `gh stack` is a [GitHub CLI](https://cli.github.com/) extension for managing **stacked branches and pull requests**. A stack is an ordered list of branches where each branch builds on the one below it, rooted on a trunk branch (typically the repo's default branch). Each branch maps to one PR whose base is the branch below it, so reviewers see only the diff for that layer.
 
@@ -29,7 +29,7 @@ The **bottom** of the stack is the branch closest to the trunk, and the **top** 
 
 Use this skill when the user wants to:
 
-- Break a large change into a chain of small, reviewable PRs
+- Break a change that crosses the reviewability ceiling into an ordered chain of dependent PRs
 - Create, rebase, push, or sync a stack of dependent branches
 - Navigate between layers of a branch stack
 - View the status of stacked PRs
@@ -130,13 +130,14 @@ This keeps each branch focused on one concern. Multiple commits per branch are f
 Create a new branch (`gh stack add`) when you're starting a **different concern** that depends on what you've built so far. Signs it's time for a new branch:
 
 - You're switching from backend to frontend work
-- You're moving from core logic to tests or documentation
 - The next set of changes has a different reviewer audience
-- The current branch's PR is already large enough to review
+- The current branch's PR is already at the reviewability ceiling
+
+Tests and documentation for the code in the current branch are **not** a different concern, and upstream's list said they were. They ride the branch whose code they describe: `AGENTS.md` calls a pull request split off for that reason "the shape to stop producing", because its one claim cannot be verified without the layer underneath it.
 
 ### One stack, one story
 
-Think of a stack from the reviewer's perspective: the stack of PRs should **tell a cohesive story** about a feature or project. A reviewer should be able to read the PRs in sequence and understand the progression of changes, with each PR being a small, logical piece of the whole.
+Think of a stack from the reviewer's perspective: the stack of PRs should **tell a cohesive story** about a feature or project. A reviewer should be able to read the PRs in sequence and understand the progression of changes, with each PR being a coherent piece of the whole.
 
 **When to use a single stack:** All the branches are part of the same feature, project, or closely related effort. Even if the work spans multiple concerns (models, API, frontend), they're all building toward the same goal.
 

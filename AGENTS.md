@@ -90,11 +90,11 @@ More generally, that ceiling is the test for whether to stack at all, not only
 for work that arrives late: a stack is the right shape exactly when work
 crosses it and therefore cannot be one pull request. This section decides
 *whether* to stack and the section below decides *how*. It
-governs the vendored `gh-stack` skill too, which opens by recommending "a chain
-of small, reviewable PRs" and whose rule 7 sizes layers from dependency order
-before any code exists — upstream's framing, not this repository's. Dependency
-order still decides what order the layers go in; it does not decide that there
-is more than one.
+governs the vendored `gh-stack` skill too, whose upstream text triggered
+stacking on wanting small pull requests and treated a change's own tests and
+documentation as a separate layer. Those lines are edited to point back here.
+Its rule 7 is left as upstream wrote it, because dependency order decides what
+order the layers go in without deciding that there is more than one.
 
 My repos are configured alike, and a ruleset covers some of the above but not
 most of it, so do not read it as backing everything it follows. What it
