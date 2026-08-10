@@ -44,6 +44,17 @@ own `AGENTS.md` lists the docs it actually has.
   rather than about speed here. Cite into a folder the same way as into a
   file — `all/passkey/design.md §4` — and the section-numbering rule above
   applies unchanged.
+- **Confirm a sweep with `grep -r` before believing it is finished**, because
+  `rg` skips binary files while traversing and one stray NUL byte makes a
+  Markdown file binary. `triangle/app`'s
+  `medication-history/03-generation-pipeline.md` carries two, inside a snippet
+  where the code means the escape `\0` as a key separator, and `file` calls the
+  whole document `data`. Every `rg` search over that repository's docs has been
+  quietly missing it: renaming the entry points found three stale references
+  there only after `grep -rl` disagreed with `rg -l`, and the `rg` check run to
+  verify the sweep had already reported it clean. Use `rg` to do the work and
+  `grep -rl` to check the work — the disagreement is the signal, and silence
+  from `rg` alone is not evidence the sweep was complete.
 - Every project in `all/` carries YAML frontmatter with `status:` — on the file
   when it is a file, on `README.md` when it is a folder, where it is the
   status of the whole project and the documents beside it need none of their
