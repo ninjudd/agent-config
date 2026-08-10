@@ -33,11 +33,14 @@ own `AGENTS.md` lists the docs it actually has.
   `all/<name>.md`, which is now `all/<name>/overview.md`. The promoting pull
   request sweeps them in the same diff; `rg -n 'all/<name>\.md'` finds them,
   and code comments cite these paths, so this is not only a docs concern. Use
-  `rg` rather than `grep -r`, which descends into `.git` and build output: on
-  `triangle/app` the same sweep is 86ms against over two minutes, and the slow
-  one is the command a reader reaches for by habit. Cite into a folder the
-  same way as into a file — `all/passkey/design.md §4` — and the
-  section-numbering rule above applies unchanged.
+  `rg` because it skips `.git` and gitignored build output wherever it runs,
+  which a plain `command grep -r` does not — minutes rather than a moment on a
+  tree the size of `triangle/app`. Do not expect that gap to reproduce in a
+  Claude Code session: `grep` is shimmed there to an ignore-aware binary and
+  is the faster of the two, so the rule is about behaving the same everywhere
+  rather than about speed here. Cite into a folder the same way as into a
+  file — `all/passkey/design.md §4` — and the section-numbering rule above
+  applies unchanged.
 - Every project in `all/` carries YAML frontmatter with `status:` — on the file
   when it is a file, on `overview.md` when it is a folder, where it is the
   status of the whole project and the documents beside it need none of their
