@@ -108,14 +108,16 @@ message they are about to become — title in the imperative, body explaining
 why rather than what.
 
 Required is not the same as guaranteed, and the gap is wide enough to have
-mattered here. I hold bypass permission and use it: #11 merged carrying four
-unresolved threads, seconds ahead of the review that opened them. Dismissal on
-push is real — a push to this pull request dismissed a standing approval —
-but it did not fire when #6 was force-pushed during a rebase, and a stored
-approval's recorded commit can later move to the new head on its own, which
-defeats reading that commit back at submission time. So check the state rather
-than inferring it from the configuration, and do not build an argument on a
-rule being mechanically enforced.
+mattered here. I hold bypass permission and use it: #11 merged four seconds
+after a reviewer opened three threads on it. A fourth landed nine seconds
+later again, from a review already being written when the merge went through
+— not a bypass at all, but a race, and one that can catch someone who never
+bypasses anything. Dismissal on push is real — a push to this pull request
+dismissed a standing approval — but it did not fire when #6 was force-pushed
+during a rebase, and a stored approval's recorded commit can later move to the
+new head on its own, which defeats reading that commit back at submission
+time. So check the state rather than inferring it from the configuration, and
+do not build an argument on a rule being mechanically enforced.
 
 That collides with the wrapping rule at the end of this file, and the wrapping
 rule wins. PR bodies go up unwrapped, so the squashed commit message inherits
