@@ -96,9 +96,9 @@ before any code exists — upstream's framing, not this repository's. Dependency
 order still decides what order the layers go in; it does not decide that there
 is more than one.
 
-My repos are configured alike, and a ruleset enforces some of the above but not
+My repos are configured alike, and a ruleset covers some of the above but not
 most of it, so do not read it as backing everything it follows. What it
-enforces: main takes no direct pushes, history stays linear, every review
+requires: main takes no direct pushes, history stays linear, every review
 thread must be resolved before a merge, and merges are squashed with the PR
 title and body taken as the commit message verbatim. What it cannot: never
 merging, the draft policy, and every sizing judgement above are conventions I
@@ -106,6 +106,16 @@ check by hand — which is exactly why the merge is my checkpoint rather than
 something I could delegate to GitHub. So write the title and body as the commit
 message they are about to become — title in the imperative, body explaining
 why rather than what.
+
+Required is not the same as guaranteed, and the gap is wide enough to have
+mattered here. I hold bypass permission and use it: #11 merged carrying four
+unresolved threads, seconds ahead of the review that opened them. Dismissal on
+push is real — a push to this pull request dismissed a standing approval —
+but it did not fire when #6 was force-pushed during a rebase, and a stored
+approval's recorded commit can later move to the new head on its own, which
+defeats reading that commit back at submission time. So check the state rather
+than inferring it from the configuration, and do not build an argument on a
+rule being mechanically enforced.
 
 That collides with the wrapping rule at the end of this file, and the wrapping
 rule wins. PR bodies go up unwrapped, so the squashed commit message inherits
