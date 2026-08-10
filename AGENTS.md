@@ -15,6 +15,16 @@ own `AGENTS.md` lists the docs it actually has.
   so renumbering a section silently breaks references. Add new sections at the
   end.
 - A plan whose status line is stale is worse than one with no status at all.
+- The lists and status lines ride the pull request that changes what they say.
+  The one that completes a plan marks it shipped and edits `now.md` in the same
+  diff, so the squash lands code and docs as one commit; a plan delivered in
+  slices closes in its last one, not its first. What the `now.md` edit *is*
+  varies by repository, so read the file rather than assuming: `msg` empties the
+  list back to "Nothing in flight.", while `modal`, `field` and `fyra`
+  deliberately keep the shipped line and attach the condition for removing it
+  later. Do not plan a separate close-out pull request after the merge — it
+  spends a review cycle saying what the merge already said. Correcting one that
+  was genuinely forgotten is a different thing and is fine.
 
 ## Pull requests
 
@@ -43,20 +53,71 @@ requests: two changes citing different plans belong together when they share a
 rationale, when one is unusable until the other lands, or when verifying the
 second means re-running the first. What replaces line count as the ceiling is
 reviewability — too big is when a reviewer would be holding two unrelated
-arguments at once, or when half of it could ship and be used while the rest is
-still being written. Short of that, fold the follow-on into the pull request
-that unblocked it: the one-file move, the doc sweep, the retirement its
-predecessor made possible. A five-file, twenty-insertion pull request split off
+arguments at once, or when one half would still be worth shipping if the other
+were abandoned. That second test is about independent value, not about what
+lands first, and the examples below turn on the difference.
+
+Short of that ceiling, fold the follow-on into the pull request that unblocked
+it: the one-file move, the doc sweep, the retirement its predecessor made
+possible. Each of those could technically go out on its own, which is why the
+weaker reading of the ceiling would split them, and none is worth anything
+alone — a sweep documenting a change that has not shipped, a retirement of
+something still in use. That is sequencing, not independence, and sequencing is
+not a reason to split. A five-file, twenty-insertion pull request split off
 only because it belonged to a different plan's chunk is the shape to stop
 producing — its one claim could not be verified without the pull request
 underneath it, so the review had to hold both anyway.
 
-My repos are configured alike, and the ruleset is what enforces all of the
-above: main takes no direct pushes, history stays linear, every review thread
-must be resolved before a merge, and merges are squashed with the PR title and
-body taken as the commit message verbatim. So write the title and body as the
-commit message they are about to become — title in the imperative, body
-explaining why rather than what.
+Folding in is not blocked by the rule that work ends at `gh pr create`. What
+that reserves is the merge, not the branch: a pull request under review still
+takes commits — it is how findings get fixed — so a follow-on belonging to
+the same argument goes onto the same branch, costing the extra review cycle
+this section already argues is cheaper than a second pull request. Say in the
+description that the scope grew, because pushing dismisses any approval
+standing against the old head, and that dismissal is the cost being spent.
+
+An *unrelated* change found after the push is the other half of the ceiling,
+and it is what stacking is for: folding it in would put a second argument in
+front of a reviewer already holding one, so it becomes its own pull request,
+stacked on the first where it depends on it. That is not licence to push a thin
+pull request and stack the rest behind it. Sizing is settled before opening —
+the first one still has to have been big enough on its own — and stacking only
+handles what genuinely arrives afterwards. Once I have merged, the predecessor
+is gone and the follow-on is simply its own pull request: the ordinary case,
+not a failure of this rule.
+
+More generally, that ceiling is the test for whether to stack at all, not only
+for work that arrives late: a stack is the right shape exactly when work
+crosses it and therefore cannot be one pull request. This section decides
+*whether* to stack and the section below decides *how*. It
+governs the vendored `gh-stack` skill too, whose upstream text triggered
+stacking on wanting small pull requests and treated a change's own tests and
+documentation as a separate layer. Those lines are edited to point back here.
+Its rule 7 is left as upstream wrote it, because dependency order decides what
+order the layers go in without deciding that there is more than one.
+
+My repos are configured alike, and a ruleset covers some of the above but not
+most of it, so do not read it as backing everything it follows. What it
+requires: main takes no direct pushes, history stays linear, every review
+thread must be resolved before a merge, and merges are squashed with the PR
+title and body taken as the commit message verbatim. What it cannot: never
+merging, the draft policy, and every sizing judgement above are conventions I
+check by hand — which is exactly why the merge is my checkpoint rather than
+something I could delegate to GitHub. So write the title and body as the commit
+message they are about to become — title in the imperative, body explaining
+why rather than what.
+
+Required is not the same as guaranteed, and the gap is wide enough to have
+mattered here. I hold bypass permission and use it: #11 merged four seconds
+after a reviewer opened three threads on it. A fourth landed nine seconds
+later again, from a review already being written when the merge went through
+— not a bypass at all, but a race, and one that can catch someone who never
+bypasses anything. Dismissal on push is real — a push to this pull request
+dismissed a standing approval — but it did not fire when #6 was force-pushed
+during a rebase, and a stored approval's recorded commit can later move to the
+new head on its own, which defeats reading that commit back at submission
+time. So check the state rather than inferring it from the configuration, and
+do not build an argument on a rule being mechanically enforced.
 
 That collides with the wrapping rule at the end of this file, and the wrapping
 rule wins. PR bodies go up unwrapped, so the squashed commit message inherits
@@ -96,11 +157,24 @@ primitive rather than a convention to imitate.
 
 **Create it as a stack.** The CLI is an official extension and is not installed
 by default: `gh extension install github/gh-stack`, then `gh stack init <name>`,
-`gh stack add <branch>`, `gh stack submit`. From the web UI, create the child
-with its base set to the parent's branch and choose **Create stack** to link
-them. Either way the result is what a base pointer alone does not give you: a
-stack icon and a stack map in each pull request's merge box, listing every
-layer with its status and letting a reviewer move between them.
+`gh stack add <branch>`, `gh stack submit --auto --open`. `--open` is the
+load-bearing one: an unattended run is already in auto mode whether or not the
+flag is typed, and auto mode creates every new pull request as a **draft**
+unless `--open` is passed, which the ready-by-default rule above forbids.
+Nothing in the output says "draft", and running the command by hand does not
+reproduce it, because the interactive editor defaults to ready for review. Pass
+`--auto` anyway, so the behaviour does not change if the terminal turns out not
+to be what you assumed. Everything else about driving these commands unattended
+belongs to the gh-stack skill — including that `--open` readies *existing*
+pull requests too, so a stack deliberately holding a draft layer needs a
+different sequence. Load that skill before running any `gh stack` command
+rather than working from this summary.
+
+From the web UI, create the child with its base set to the parent's branch and
+choose **Create stack** to link them. Either way the result is what a base
+pointer alone does not give you: a stack icon and a stack map in each pull
+request's merge box, listing every layer with its status and letting a reviewer
+move between them.
 
 That map is the reason to bother. A reviewer opening a child sees a correct diff
 either way, but only a real stack tells them where they are in the series and

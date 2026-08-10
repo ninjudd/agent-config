@@ -12,7 +12,19 @@ name: gh-stack
 ---
 # gh-stack
 
-> **Vendored from `github/gh-stack` at `v0.1.0`, with deliberate local edits.** Rule 3 and rule 11 below are not upstream's: rule 3 replaces the auto-generated PR body, and rule 11 turns upstream's "use `gh stack merge --yes`" into documentation, because `AGENTS.md` reserves merging for the user. A refresh from upstream reintroduces both — diff before taking it.
+> **Vendored from `github/gh-stack` at `v0.1.0`, with deliberate local edits.**
+>
+> **Refreshing: diff against the recorded ref, do not work from the list below.** The frontmatter carries `github-repo`, `github-ref` and `github-tree-sha` for exactly this, so the complete set of local changes is a command rather than a paragraph someone has to have kept current:
+>
+> ```
+> gh api "repos/github/gh-stack/contents/skills/gh-stack/SKILL.md?ref=v0.1.0" \
+>   -H "Accept: application/vnd.github.raw" > /tmp/upstream.md
+> diff /tmp/upstream.md skills/gh-stack/SKILL.md
+> ```
+>
+> What follows says *why* each divergence exists, which the diff cannot tell you. It is a summary and has fallen behind this file four times; when the two disagree, the diff is right.
+>
+> Rules 2, 3 and 11 below are not upstream's as written: rule 2 corrects which flag actually causes drafts and says what `--open` does to existing PRs, rule 3 replaces the auto-generated PR body, and rule 11 turns upstream's "use `gh stack merge --yes`" into documentation, because `AGENTS.md` reserves merging for the user. Rule 2's correction is repeated in **"Submit branches and create PRs — `gh stack submit`"**, which described the same flags the same wrong way; that section is localised too. So is **"Quick reference"**, where four `gh stack merge` rows were removed — rule 11 is prose, and the table was cut because prose saying "never" a hundred lines above does not disarm a row in a list of things to run. A refresh that restores the table defeats rule 11 by itself, which is the single most important reason not to take one section-by-section from memory. **On sizing, upstream's ordering guidance stands and its sizing framing is replaced**, in the body rather than by a note here, because a banner is read once and a trigger list is read at the moment of the decision. Three sections are localised throughout — **"When to use this skill"**, **"When to create a new branch"**, and **"One stack, one story"** — so diff those whole sections rather than hunting individual lines; naming sections instead of edits is deliberate, because a list of edits has to be updated by every later change and nothing fails when it is not. Between them, upstream made wanting small PRs the trigger for stacking, treated a change's own tests and documentation as a separate concern, and split on how large the current PR had grown. All three answer *whether* to stack, which `AGENTS.md` decides: it leans toward combining and treats splitting as the thing needing an argument. Rule 7's dependency-ordered layers are genuinely about *how* to build a stack and are untouched. A refresh from upstream reintroduces all of this — diff before taking it.
 
 `gh stack` is a [GitHub CLI](https://cli.github.com/) extension for managing **stacked branches and pull requests**. A stack is an ordered list of branches where each branch builds on the one below it, rooted on a trunk branch (typically the repo's default branch). Each branch maps to one PR whose base is the branch below it, so reviewers see only the diff for that layer.
 
@@ -29,7 +41,7 @@ The **bottom** of the stack is the branch closest to the trunk, and the **top** 
 
 Use this skill when the user wants to:
 
-- Break a large change into a chain of small, reviewable PRs
+- Break a change that crosses the reviewability ceiling into an ordered chain of dependent PRs
 - Create, rebase, push, or sync a stack of dependent branches
 - Navigate between layers of a branch stack
 - View the status of stacked PRs
@@ -55,7 +67,9 @@ git config remote.pushDefault origin     # if multiple remotes exist (skips remo
 **All `gh stack` commands must be run non-interactively.** Every command invocation must include the flags and positional arguments needed to avoid prompts, TUIs, and interactive menus. If a command would prompt for input, it will hang indefinitely.
 
 1. **Always supply branch names as positional arguments** to `init`, `add`, and `checkout`. Running these commands without arguments triggers interactive prompts. Branch names are used exactly as given — a name is never prefixed or transformed, so `gh stack add refactor/foo` creates a branch named `refactor/foo`.
-2. **Always use `--auto` with `gh stack submit`** to auto-generate PR titles. Without `--auto`, `submit` prompts for a title for each new PR. **Pass `--open` too** unless the PR is genuinely not ready to be reviewed: `submit` creates drafts by default, and a draft nobody asked for is a PR that quietly does not get reviewed. `gh stack submit --auto --open` is the normal invocation. If you already submitted without it, `gh pr ready <n>` each PR — and check every PR the submit created, not only the one you were looking at.
+2. **`gh stack submit --auto --open` is the normal invocation, and `--open` is the flag that matters.** Drafting is caused by *auto mode*, not by the `--auto` flag: a non-interactive terminal enters auto mode whether or not you type it, and auto mode creates every new PR as a draft unless `--open` is passed. Do not reason your way to dropping `--auto` to avoid drafts — an unattended run drafts either way, and only `--open` prevents it. Type `--auto` regardless, so nothing changes if the terminal turns out to be interactive (where `submit` would otherwise open an editor and prompt per PR). None of this is visible in the output, and it does not reproduce by hand, because the interactive editor defaults to ready for review. If you already submitted without `--open`, `gh pr ready <n>` each PR — and check every PR the submit created, not only the one you were looking at.
+
+   **`--open` readies existing PRs too, so it is the wrong flag on a stack that is deliberately holding a draft layer.** There, submit with `--auto` alone and `gh pr ready <n>` only the layers you meant to open. Verify with `gh stack view --json` either way: both mistakes are silent, and they fail in opposite directions — an unreviewed draft nobody looks at, or unfinished work exposed for review.
 3. **`submit` writes a PR body, and it is the wrong body. Replace it.** The auto-generated body is the commit message plus a "Stack created with GitHub Stacks CLI" footer, and it is wrong in three ways at once: a commit message is hard-wrapped, so on GitHub every newline becomes a literal `<br>` and the description renders ragged; the footer is stack scaffolding, which a squash merge would carry verbatim into the permanent commit message; and it has no Testing section. Write the body yourself and `gh pr edit <n> --body-file <file>` immediately after submitting, then verify with `gh api repos/<owner>/<repo>/pulls/<n> -H "Accept: application/vnd.github.html+json" --jq .body_html | grep -c '<br>'` — any `<br>` in a prose paragraph means it went up wrapped. This is easy to skip precisely because `submit` leaves something body-shaped behind, so it looks done.
 4. **Always use `--json` with `gh stack view`.** Without `--json`, the command launches an interactive TUI that cannot be operated by agents. There is no other appropriate flag — always pass `--json`.
 5. **Handle multiple remotes.** If more than one remote is configured, pre-configure `git config remote.pushDefault origin`, or pass `--remote <name>` to the commands that accept it: `push`, `submit`, `sync`, `rebase`, and `link`. `checkout`, `modify`, and `trunk` resolve a remote but have **no `--remote` flag** — they rely on `remote.pushDefault`. With multiple remotes and no configured default, these commands exit with an error in non-interactive mode.
@@ -128,13 +142,14 @@ This keeps each branch focused on one concern. Multiple commits per branch are f
 Create a new branch (`gh stack add`) when you're starting a **different concern** that depends on what you've built so far. Signs it's time for a new branch:
 
 - You're switching from backend to frontend work
-- You're moving from core logic to tests or documentation
 - The next set of changes has a different reviewer audience
-- The current branch's PR is already large enough to review
+- The current branch's PR is already at the reviewability ceiling
+
+Tests and documentation for the code in the current branch are **not** a different concern, and upstream's list said they were. They ride the branch whose code they describe: `AGENTS.md` calls a pull request split off for that reason "the shape to stop producing", because its one claim cannot be verified without the layer underneath it.
 
 ### One stack, one story
 
-Think of a stack from the reviewer's perspective: the stack of PRs should **tell a cohesive story** about a feature or project. A reviewer should be able to read the PRs in sequence and understand the progression of changes, with each PR being a small, logical piece of the whole.
+Think of a stack from the reviewer's perspective: the stack of PRs should **tell a cohesive story** about a feature or project. A reviewer should be able to read the PRs in sequence and understand the progression of changes, with each PR being a coherent piece of the whole.
 
 **When to use a single stack:** All the branches are part of the same feature, project, or closely related effort. Even if the work spans multiple concerns (models, API, frontend), they're all building toward the same goal.
 
@@ -534,7 +549,7 @@ gh stack push --remote upstream
 
 ### Submit branches and create PRs — `gh stack submit`
 
-Push all stack branches and create PRs on GitHub. **Always pass `--auto`** — without it, `submit` prompts for a PR title for each new branch.
+Push all stack branches and create PRs on GitHub. **Always pass `--auto`** — without it, an interactive `submit` prompts for a PR title for each new branch. See rule 2: a non-interactive run is in auto mode regardless, so `--open` is what decides drafts.
 
 ```bash
 # Submit and auto-title new PRs (required for non-interactive use)
