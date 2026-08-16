@@ -22,15 +22,18 @@ own `AGENTS.md` lists the docs it actually has.
   `triangle/app` runs fourteen folders against far more single files, which is
   the ratio to expect: reach for a folder when a file is unwieldy, not when a
   project sounds important.
-- A folder's entry point is `overview.md`, and that is the only fixed rule
-  inside one. It is what the three lists link to, and what carries the project's
+- A folder's entry point is `README.md`, and that is the only fixed rule inside
+  one. GitHub renders a directory's `README.md` underneath the file listing, so
+  browsing to `all/passkey/` shows the plan; any other name is a file you have
+  to know to click, which is what `overview.md` was until this rule replaced it.
+  It is what the three lists link to, and what carries the project's
   `status:` frontmatter. Everything else is shaped to the work rather than to a
   template: `triangle/app` has grown `design.md`, numbered step documents in
   execution order, `decisions.md`, `progress.md`, a `post-mortem.md`, and
   `impl/` or `reviews/` subfolders, but each emerged from a particular project
   and none is required. Add a document when there is something to put in it.
 - Promoting a file to a folder breaks every inbound reference to
-  `all/<name>.md`, which is now `all/<name>/overview.md`. The promoting pull
+  `all/<name>.md`, which is now `all/<name>/README.md`. The promoting pull
   request sweeps them in the same diff; `rg -n 'all/<name>\.md'` finds them,
   and code comments cite these paths, so this is not only a docs concern. Use
   `rg` because it skips `.git` and gitignored build output wherever it runs,
@@ -41,16 +44,33 @@ own `AGENTS.md` lists the docs it actually has.
   rather than about speed here. Cite into a folder the same way as into a
   file — `all/passkey/design.md §4` — and the section-numbering rule above
   applies unchanged.
+- **Confirm a sweep with `command grep -rl` before believing it is finished**,
+  because `rg` skips binary files while traversing and one stray NUL byte makes
+  a Markdown file binary. `triangle/app`'s
+  `medication-history/03-generation-pipeline.md` carries two, inside a snippet
+  where the code means the escape `\0` as a key separator, and `file` calls the
+  whole document `data`. Every `rg` search over that repository's docs has been
+  quietly missing it: renaming the entry points found three stale references
+  there only after a real `grep` disagreed with `rg -l`, and the `rg` check run
+  to verify the sweep had already reported it clean. Use `rg` to do the work
+  and `command grep -rl` to check it — the disagreement is the signal, and
+  silence from `rg` alone is not evidence the sweep was complete. **The word
+  `command` is the whole check**, for the reason the bullet above gives: bare
+  `grep` in a Claude Code session is the shim, which passes `-I` and therefore
+  skips exactly the binary files `rg` skips, so the two agree and confirm each
+  other's blind spot. On the file above, `rg -l` and shimmed `grep -rl` both
+  return two paths and `command grep -rl` returns three. Delete the word as
+  noise and the check still runs, still passes, and stops meaning anything.
 - Every project in `all/` carries YAML frontmatter with `status:` — on the file
-  when it is a file, on `overview.md` when it is a folder, where it is the
+  when it is a file, on `README.md` when it is a folder, where it is the
   status of the whole project and the documents beside it need none of their
   own. `triangle/app` bears out the "one place" half exactly — thirteen of its
   nested documents carry a status keyword and they are exactly its thirteen
-  `overview.md` files, so nothing beside an overview has ever carried one — but
-  not the entry-point half, and the gap is the honest reason to state this as a
-  rule rather than describe it as practice. Three of its fourteen folders keep
-  a root `design.md` and no `overview.md`: `invite-codes` and
-  `survey-adjustment` push theirs down to `impl/overview.md`, and `doctor-scan`
+  folder entry points, so nothing beside an entry point has ever carried one —
+  but not the entry-point half, and the gap is the honest reason to state this
+  as a rule rather than describe it as practice. Three of its fourteen folders
+  keep a root `design.md` and no entry point at the root: `invite-codes` and
+  `survey-adjustment` push theirs down into `impl/`, and `doctor-scan`
   carries no status anywhere, which is a folder-shaped project the rule above
   says cannot exist. None of the three is on any of the lists, so they are past
   work nobody is going back to fix. It is also what the review gate reads, so a
