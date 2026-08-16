@@ -89,6 +89,68 @@ own `AGENTS.md` lists the docs it actually has.
   merge — it spends a review cycle saying what the merge already said.
   Correcting one that was genuinely forgotten is a different thing and is fine.
 
+## Docs are written in Google developer documentation style
+
+Write `docs/` in the register of the Google developer documentation style
+guide (https://developers.google.com/style): second person, present tense,
+active voice, sentence-case headings, code font for identifiers and commands,
+short task-oriented sections, and an example or command transcript wherever
+one beats another paragraph of prose. Adopted 2026-08-10 after comparing
+registers (ASD-STE100 → ISO 24495-1 plain language → this) on Field's sends
+design; this one kept the precision without the stiffness.
+
+Moving forward only: new documents and new sections use the style, and a
+document being substantially revised converts as part of the revision.
+Existing docs get a cleanup pass later — do not reflow or rewrite one you are
+not otherwise changing. `docs/projects/` keeps its own structural conventions
+(numbered cited sections, the status frontmatter each project carries, decision
+records with rejected alternatives); the style governs the prose inside them,
+not their shape.
+
+Chat gets a different mix. Explain a complicated concept in ISO 24495-1
+plain language: prose organized around what the reader needs, leading with
+what the thing is and what they do with it, ordinary paragraphs, no headings
+or callouts — document scaffolding reads as a manual page dropped into a
+conversation. When an example is warranted — and a short one often beats a
+third paragraph of abstraction — render it the Google way inside that prose:
+a fenced snippet or command transcript with real names and code font for
+identifiers, without importing the rest of the page furniture along with it.
+The prose carries the explanation; the Google treatment carries the examples
+embedded in it.
+
+Prose written to GitHub — pull request bodies, issue text, review comments —
+is a third kind, and takes this section's *structure* rather than the chat
+register's: headings, code font for identifiers and commands, and an example or
+command transcript wherever one beats a paragraph. It is written to be scanned,
+returned to and acted on rather than read once, and this file already requires
+scaffolding in it: every description closes with a **Testing** section, which
+is exactly the furniture the chat register turns down. So read "no headings or
+callouts" as a rule about talking to a person, not about anything that renders
+on GitHub.
+
+Voice does not come with it, at least not into a pull request body, because the
+squash turns that body into a commit message: the rule below wins there —
+imperative title, and prose explaining why rather than what — over the second
+person, present tense and task-oriented sections the `docs/` register asks for.
+A body argues where a document instructs, and the two cannot both be the rule
+for the same text. Issue comments and review comments carry no such constraint
+and can take the register whole. How any of it wraps is a separate question
+again, answered by the hard-wrapping rule near the end of this file.
+
+One rule cuts across all three registers above, including the structure GitHub
+prose borrows. **When the content is a list, write a list** — chat included.
+Four items of the same shape, one per project or finding or blocker, are a list
+whatever punctuation they arrive in, and running them together as a paragraph
+makes the reader re-derive boundaries the writer already knew. Give each item a
+short lead-in naming the thing, then its explanation in full sentences: the
+bullet buys the scan, and the sentences keep what clipped fragments would drop.
+A list is not the scaffolding the chat register turns down — headings and
+callouts impose a document's shape on a conversation, while a list is the shape
+the content already has. The test is whether the items are parallel and
+enumerable, not whether there are several of them: an argument moving through
+three steps is prose, and cutting it into bullets loses the connective tissue
+that made it an argument.
+
 ## Pull requests
 
 **Open pull requests; never merge them.** Merging is my review checkpoint, no
