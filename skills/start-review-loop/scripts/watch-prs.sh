@@ -69,14 +69,27 @@ AUTHOR_LIST=$(printf '%s' "$AUTHORS" | tr ',' ' ')
 # a watch that starts cleanly and never says anything. Refuse it once, here,
 # where the message is read. A real login that authors nothing is the same
 # silence, and only the establishment count in the skill catches that.
+#
+# Say which failure it was. `gh api` exits non-zero for a network failure, a
+# proxy, a rate limit or a bad token exactly as it does for a 404, and the
+# skill tells its reader that establishment is the moment a wrong login
+# announces itself — so "no such login" on a network blip sends them off to
+# re-resolve a login that was right all along. Only a 404 is a missing login;
+# everything else is the lookup failing, which still refuses to start, since
+# nothing should run on an unverified login, but under its own name.
 for a in $AUTHOR_LIST; do
   case "$a" in
     @*)    echo "watch-prs.sh: --author takes a literal login, not $a" >&2; exit 2 ;;
     app/*) probe="apps/${a#app/}" ;;   # `gh pr list --author app/dependabot`
     *)     probe="users/$a" ;;         # a user, or a bot as `dependabot[bot]`
   esac
-  gh api "$probe" >/dev/null 2>&1 \
-    || { echo "watch-prs.sh: --author $a: no such GitHub login" >&2; exit 2; }
+  if ! err=$(gh api "$probe" 2>&1 >/dev/null); then
+    case "$err" in
+      *"HTTP 404"*) echo "watch-prs.sh: --author $a: no such GitHub login" >&2 ;;
+      *) echo "watch-prs.sh: --author $a: could not verify login — network or auth error, not a missing login: ${err%%$'\n'*}" >&2 ;;
+    esac
+    exit 2
+  fi
 done
 
 # One "<number> <sha> <ref>" line per open pull request in $1, restricted to
