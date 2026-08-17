@@ -19,17 +19,39 @@ git clone git@github.com:ninjudd/agent-config.git
 | `skills/` | `~/.claude/skills`, `~/.codex/skills` | both |
 | `claude/agents/` | `~/.claude/agents` | Claude Code |
 | `claude/commands/` | `~/.claude/commands` | Claude Code |
+| `claude/settings.json` | `~/.claude/settings.json` | Claude Code |
+| `claude/statusline.sh` | `~/.claude/statusline.sh` | Claude Code |
 | `codex/prompts/` | `~/.codex/prompts` | Codex |
 
 `AGENTS.md` is the prompt: rules that apply in every repository, so a project's
 own `AGENTS.md` only has to carry what is specific to it.
 
+`claude/settings.json` and `claude/statusline.sh` are here rather than in the
+private repo because nothing in either is machine-local. The status line reads
+its session JSON from stdin and prints ANSI; the settings hold hooks, a plugin
+list, and preferences that are the same wherever I work. What kept them private
+was a single absolute path — `settings.json` named the script as
+`/Users/<me>/.claude/statusline.sh`, which is wrong on every other machine and
+fails *silently*, because a status line whose command cannot be found renders
+as nothing at all rather than an error. Both now go through
+`~/.claude/statusline.sh`, a path `install.sh` guarantees, and the coupling
+that forced the split is gone.
+
+Publishing settings does mean publishing how I run, including
+`permissions.defaultMode` and the two skipped permission prompts. That is a
+posture, not a secret, and it is worth more as something a reader can copy.
+Credentials were never in either repo: Claude Code keeps them in
+`~/.claude/.credentials.json`, which is not linked here and is in `.gitignore`
+as a backstop.
+
 ## The private half
 
-Machine-local configuration — settings, a status line, and instructions about
-directories that exist on one laptop — lives in a separate private repo.
-`install.sh` picks it up when it sits alongside this one, or wherever
-`AGENT_CONFIG_PRIVATE` points:
+What is left after the section above is genuinely local: instructions about
+directories that exist on one laptop, and Codex's `config.toml`, which is
+mostly state Codex writes itself — two dozen `[projects."/Users/<me>/..."]`
+trust entries naming paths that exist nowhere else. That lives in a separate
+private repo, which `install.sh` picks up when it sits alongside this one, or
+wherever `AGENT_CONFIG_PRIVATE` points:
 
 ```
 ~/ninjudd/agent-config          # this repo

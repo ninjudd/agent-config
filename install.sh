@@ -35,14 +35,14 @@ links=(
   "$REPO/skills|$CODEX_HOME/skills"
   "$REPO/claude/agents|$CLAUDE_HOME/agents"
   "$REPO/claude/commands|$CLAUDE_HOME/commands"
+  "$REPO/claude/settings.json|$CLAUDE_HOME/settings.json"
+  "$REPO/claude/statusline.sh|$CLAUDE_HOME/statusline.sh"
   "$REPO/codex/prompts|$CODEX_HOME/prompts"
 )
 
 if [ -d "$PRIVATE" ]; then
   links+=(
     "$PRIVATE/claude/CLAUDE.md|$CLAUDE_HOME/CLAUDE.md"
-    "$PRIVATE/claude/settings.json|$CLAUDE_HOME/settings.json"
-    "$PRIVATE/claude/statusline.sh|$CLAUDE_HOME/statusline.sh"
     "$PRIVATE/codex/config.toml|$CODEX_HOME/config.toml"
   )
 fi
