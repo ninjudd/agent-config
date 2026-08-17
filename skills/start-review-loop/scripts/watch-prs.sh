@@ -15,20 +15,36 @@
 #
 # Usage:
 #   watch-prs.sh --repos owner/a[,owner/b...] --state <path>
-#                [--interval 60] [--worktree <dir>]
+#                [--author login[,login...]] [--interval 60] [--worktree <dir>]
+#
+# --author narrows the watch to pull requests those logins authored, which is
+# how the review loop keeps to the operator's own on a shared repository. Pass
+# logins literally, never `@me`: `@me` is resolved against whichever token is
+# live when the query runs, and under the review loop's GH_TOKEN that is the
+# reviewing account, which authors nothing — the watch would then be silent
+# from the first pass on, indistinguishable from a repository with nothing
+# open. Without the flag every open pull request is watched. This watcher
+# filters at the source where watch-threads.sh deliberately does not, because
+# its events are pushes: on a shared repository every push by anyone is one,
+# none of them is the loop's to review, and every line here is a Monitor
+# notification counting toward the limit that stops a watcher.
 #
 # The state file is the loop's memory of what has been seen. Seed it with rows
 # of `<owner/repo> <number> <sha> <ref>` to baseline heads as already reviewed;
-# an empty file means every open pull request reports as new, which is the
-# right default when the loop is establishing itself.
+# an empty file means every watched pull request reports as new, which is the
+# right default when the loop is establishing itself. The state file belongs
+# to one scope: narrowing --author against an existing one reports the pull
+# requests that left the watch as CLOSED once, so start a fresh file when the
+# scope changes.
 #
-# Tracks up to 200 open pull requests per repository. That is a documented
-# property rather than an accident: past the limit a tracked pull request would
-# be missing from the answer and read as closed.
+# Tracks up to 200 open pull requests per repository — per author, when
+# --author is given, since each login is listed separately. That is a
+# documented property rather than an accident: past the limit a tracked pull
+# request would be missing from the answer and read as closed.
 
 set -uo pipefail
 
-REPOS=""; STATE=""; INTERVAL=60; WORKTREE=""
+REPOS=""; STATE=""; INTERVAL=60; WORKTREE=""; AUTHORS=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -36,6 +52,7 @@ while [ $# -gt 0 ]; do
     --state)    STATE="${2:-}"; shift 2 ;;
     --interval) INTERVAL="${2:-60}"; shift 2 ;;
     --worktree) WORKTREE="${2:-}"; shift 2 ;;
+    --author)   AUTHORS="${2:-}"; shift 2 ;;
     *) echo "watch-prs.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -45,6 +62,61 @@ done
 touch "$STATE" 2>/dev/null || { echo "watch-prs.sh: cannot write state file: $STATE" >&2; exit 2; }
 
 REPO_LIST=$(printf '%s' "$REPOS" | tr ',' ' ')
+AUTHOR_LIST=$(printf '%s' "$AUTHORS" | tr ',' ' ')
+
+# A login that does not exist is not an error to `gh pr list --author`: it is
+# an empty answer, exit 0, on every pass — a mistyped operator login would give
+# a watch that starts cleanly and never says anything. Refuse it once, here,
+# where the message is read. A real login that authors nothing is the same
+# silence, and only the establishment count in the skill catches that.
+#
+# Say which failure it was. `gh api` exits non-zero for a network failure, a
+# proxy, a rate limit or a bad token exactly as it does for a 404, and the
+# skill tells its reader that establishment is the moment a wrong login
+# announces itself — so "no such login" on a network blip sends them off to
+# re-resolve a login that was right all along. Only a 404 is a missing login;
+# everything else is the lookup failing, which still refuses to start, since
+# nothing should run on an unverified login, but under its own name.
+for a in $AUTHOR_LIST; do
+  case "$a" in
+    @*)    echo "watch-prs.sh: --author takes a literal login, not $a" >&2; exit 2 ;;
+    app/*) probe="apps/${a#app/}" ;;   # `gh pr list --author app/dependabot`
+    *)     probe="users/$a" ;;         # a user, or a bot as `dependabot[bot]`
+  esac
+  if ! err=$(gh api "$probe" 2>&1 >/dev/null); then
+    case "$err" in
+      *"HTTP 404"*) echo "watch-prs.sh: --author $a: no such GitHub login" >&2 ;;
+      *) echo "watch-prs.sh: --author $a: could not verify login — network or auth error, not a missing login: ${err%%$'\n'*}" >&2 ;;
+    esac
+    exit 2
+  fi
+done
+
+# One "<number> <sha> <ref>" line per open pull request in $1, restricted to
+# $AUTHOR_LIST when that is set. Listed once per author rather than filtered
+# client-side, so --limit bounds each author's pull requests rather than the
+# repository's: on a repository with more than 200 open, a client-side filter
+# over the first 200 would drop the operator's own past the cut, and those
+# would read as closed. Any listing failing fails the whole call, so the
+# caller carries the repository's rows forward instead of reading a partial
+# answer as "everything else closed".
+list_prs() {
+  local repo="$1" a chunk out=""
+  if [ -z "$AUTHOR_LIST" ]; then
+    gh pr list --repo "$repo" --state open --limit 200 \
+      --json number,headRefOid,headRefName \
+      --jq '.[] | "\(.number) \(.headRefOid) \(.headRefName)"' 2>/dev/null
+    return
+  fi
+  for a in $AUTHOR_LIST; do
+    chunk=$(gh pr list --repo "$repo" --author "$a" --state open --limit 200 \
+              --json number,headRefOid,headRefName \
+              --jq '.[] | "\(.number) \(.headRefOid) \(.headRefName)"' 2>/dev/null) || return 1
+    [ -n "$chunk" ] && out="$out$chunk
+"
+  done
+  printf '%s' "$out"
+}
 
 prev_branch=""
 [ -n "$WORKTREE" ] && prev_branch=$(git -C "$WORKTREE" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
@@ -56,14 +128,12 @@ while true; do
     # A failed query must never look like "everything closed". On error, carry
     # this repo's rows forward untouched and try again next cycle — otherwise a
     # network blip reports every tracked pull request as closed.
-    # --limit is not optional here. `gh pr list` defaults to 30, and a tracked
-    # pull request beyond that page is simply absent from the answer — which
-    # the closure check below cannot tell apart from closed, so it would retire
-    # a live pull request and never mention it again. Same failure as the
-    # nested-guard bug, reached through a different door.
-    if ! out=$(gh pr list --repo "$repo" --state open --limit 200 \
-                 --json number,headRefOid,headRefName \
-                 --jq '.[] | "\(.number) \(.headRefOid) \(.headRefName)"' 2>/dev/null); then
+    # --limit is not optional in list_prs. `gh pr list` defaults to 30, and a
+    # tracked pull request beyond that page is simply absent from the answer —
+    # which the closure check below cannot tell apart from closed, so it would
+    # retire a live pull request and never mention it again. Same failure as
+    # the nested-guard bug, reached through a different door.
+    if ! out=$(list_prs "$repo"); then
       carried=$(grep "^$repo " "$STATE" 2>/dev/null || true)
       [ -n "$carried" ] && new_state="$new_state$carried
 "

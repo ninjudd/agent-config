@@ -1,6 +1,6 @@
 ---
 name: start-fix-loop
-description: Watch every open pull request for incoming review findings, verify each against the code, fix it, push, reply in its thread, and resolve it — running in the background alongside other work until the user stops it. Use when the user invokes /start-fix-loop or asks to watch for reviews and act on them, keep fixing review comments as they arrive, or drive pull requests to a clean review.
+description: Watch your own open pull requests for incoming review findings, verify each against the code, fix it, push, reply in its thread, and resolve it — running in the background alongside other work until the user stops it. Use when the user invokes /start-fix-loop or asks to watch for reviews and act on them, keep fixing review comments as they arrive, or drive pull requests to a clean review.
 ---
 
 # Start Fix Loop
@@ -13,14 +13,30 @@ Treat "fixed" as an externally visible assertion. Resolving a thread tells every
 
 ## One repository: the one you are in
 
-The loop watches **only the repository of the current working directory** — every open pull request in *that* repository, and never a sibling checkout. Another agent is very likely running its own loop there, and two agents fixing one pull request race each other's pushes and each other's thread replies.
+The loop watches **only the repository of the current working directory** — the open pull requests in *that* repository, and never a sibling checkout. Another agent is very likely running its own loop there, and two agents fixing one pull request race each other's pushes and each other's thread replies.
 
 A request to "also cover" another repository is a request to run this skill **there**, in a session whose working directory is that repository. Say so rather than widening this loop's scope.
+
+## Only your own pull requests
+
+The tracked set is the open pull requests **authored by the operator** — the person whose session this is, `ninjudd` on these repositories, which is the login `gh pr create` records as author and the one `gh api user` prints under the operator's own token. On a repository shared with other people, a teammate's pull request is not this loop's to fix: do not push to their branch, do not reply in their threads, and do not resolve anything on them. The reasoning that scopes this loop to one repository scopes it to one author for the same reason and a worse one — nobody asked you to rewrite their work, and a fix pushed to someone else's branch arrives as a stranger's commit on a change they are still holding in their head.
+
+**Resolve that login once, at establishment, and resolve it deliberately.** `gh api user --jq .login` is the command, but read what it returns rather than assuming: `start-review-loop` authenticates as `minjudd` by setting `GH_TOKEN`, and if that variable is set in this session's environment the same call returns the review identity instead. The filter then selects the pull requests that identity authored, which is normally none, and the loop goes completely quiet while every finding sits unfixed — indistinguishable from a repository with nothing outstanding, which is the shape of failure this skill keeps trying to design out. If the login is not the account whose work you are here to fix, say so and stop rather than filtering on it.
+
+**Then hold that login literally, and stop saying `@me`.** `@me` is resolved by whichever token is active at the moment the query runs, so it re-answers the question on every poll while the establishment check answered it only once. A `GH_TOKEN` that arrives mid-session — the review loop starting in the same session is the ordinary way — silently repoints the filter at the review identity, and the loop keeps polling a set that is now empty. Nothing errors, the watcher stays healthy, and your own new pull requests are the ones that go unnoticed. Substitute the validated login into every author-filtered query from then on: `--author ninjudd`, not `--author @me`. The convenience of `@me` is exactly the indirection the paragraph above exists to remove, which is why writing both is worse than writing either.
+
+**The watcher does not apply this filter, so it is yours to apply.** `watch-threads.sh` lists open pull requests with no author predicate, so `FINDING`, `VERDICT` and `REVIEW` lines arrive for everyone's. That is deliberate rather than a gap: knowing a teammate's pull request has findings is useful, and suppressing it at the source would also hide the case where they have opened one against work of yours. Filter when deciding whether to act, not when deciding whether to look. `start-review-loop` makes the opposite choice for its own watcher — `watch-prs.sh --author` filters at the source — and its skill says why: its events are pushes, which on a shared repository arrive for everyone's work and mean nothing for anyone else's, where a finding on a teammate's pull request is at least worth knowing about.
+
+Say once, per pull request **you decline to act on**, that it is out of scope and why — at the moment a `FINDING`, `VERDICT` or `REVIEW` line actually arrives for it, not at establishment. A silent skip is indistinguishable from a loop that never noticed, and the user cannot tell the difference from outside; but a skip presupposes something to skip, and that is an arriving finding rather than an existing pull request. The distinction is worth the words because the two readings diverge exactly where this rule is most needed: announcing every foreign pull request up front on a repository with thirty-four of them is a wall of text about work nobody asked you to do, most of which will never produce a finding at all.
+
+Bots count as other people. A Dependabot or Renovate pull request is not authored by you and is not this loop's work, however mechanical the fix looks.
+
+**An explicit instruction outranks this, and sets the scope.** The rule is a default about what the loop reaches for unattended, not a prohibition on ever touching another author's branch. Asked to fix a specific pull request of someone else's, fix that one; asked to watch a teammate's pull requests too, or every pull request in the repository, do that, with the author filter widened to match or dropped. Widen the set exactly as far as the instruction says and no further: a named pull request does not reopen the whole set, and "watch berk's too" does not mean everyone's.
 
 ## Establish the loop
 
 1. Read the repository's `AGENTS.md`, `CLAUDE.md`, and any applicable review or GitHub skills. The user's own conventions outrank anything here.
-2. Resolve the repository and **every open pull request**, not only the checked-out branch's. Each one's number, base branch, head SHA, and review threads are the tracked set. If nothing is open, say so and watch for the first one rather than inventing a target.
+2. Resolve the repository, the login you push as, and **every open pull request that login authored**, not only the checked-out branch's — `gh pr list --author <the login you just validated> --state open --limit 200`, spelled out rather than `@me` for the reason the section above gives. `--limit` is not optional: `gh pr list` defaults to 30, both watcher scripts here pass 200 with a comment saying why, and omitting it on a repository where you have more than thirty open gives a loop that tracks the first thirty faithfully and never mentions the rest. Those are not skipped under the rule above, which would at least say something — they are absent, so nothing reports them. Each pull request's number, base branch, head SHA, and review threads are the tracked set. Say how many you tracked against how many are open in total — "tracking 10 of 44 open, the rest other people's" — because that sentence is what makes a truncation visible the moment it happens rather than never. If nothing of yours is open, say so and watch for the first one rather than inventing a target; if other people's are open, that is the same idle state and not a smaller one.
 3. Record each head SHA and each pull request's `reviewDecision`, and baseline **only the already-resolved threads**, so settled findings are not re-litigated. A `reviewDecision` of `CHANGES_REQUESTED` at establishment is outstanding work for the same reason an unresolved thread is — somebody asked for changes and nobody has withdrawn the request — and it is never baselined away, whether or not any thread accompanies it. Never baseline an unresolved one. Resolved means somebody decided; unresolved means outstanding work, whether it arrived a second ago or before the loop existed. A baseline of "every thread that exists right now" silently swallows every finding already waiting — the loop then runs perfectly and fixes nothing.
 4. Note which pull requests are stacked on others. A finding about code that belongs to a base PR is fixed on the base branch, not duplicated onto the child — see "Stacked pull requests".
 5. **Arm the watcher now, before fixing anything.** It *is* the loop; the rest of this skill is only what to do when it fires. Start it as soon as the baseline exists, confirm it is actually running, and say so. A baseline gathered and a finding fixed are not a loop — they are one pass, and a pass ends.
@@ -53,7 +69,7 @@ gh api graphql -f query='query { repository(owner:"<owner>",name:"<repo>"){
     id isResolved path line comments(last:1){nodes{author{login} body}} } } } } }'
 ```
 
-- Watch **every tracked pull request**, not just one. Poll the open set rather than a fixed list of numbers, so a pull request opened later joins on its own and a merged one drops out.
+- Watch **every tracked pull request**, not just one. Poll the open set rather than a fixed list of numbers, so a pull request opened later joins on its own and a merged one drops out. Re-apply the author filter as you poll rather than only at establishment: a repository that had only your pull requests when the loop started is not a repository that still does.
 - Watch for unresolved threads that are new since the baseline, and for review summary comments naming a SHA.
 - **CI state is independent.** A green check is not a review, and a red one is not a finding. Handle failing CI only if the user asked for that too.
 - **Do not wait for a review that is not coming.** Only the first push is reviewed automatically, and by Bugbot alone; nothing after it is automatic unless a reviewer loop is watching. If a push draws no review activity within a few minutes, report that plainly and ask whether to keep waiting, rather than idling indefinitely.
@@ -143,7 +159,7 @@ Setting the child's base to the parent's branch is the smallest part of stacking
 
 When the PR is based on another open PR:
 
-1. Fix a finding on the branch that owns the code — the base PR's branch if the code is the base PR's.
+1. Fix a finding on the branch that owns the code — the base PR's branch if the code is the base PR's. **Unless that base is someone else's pull request**, in which case stop: the rule above says not to push to it, and this step would otherwise walk straight through that boundary while looking like ordinary stack hygiene. Report the finding, say which branch owns the code and who owns the branch, and ask — a fix you cannot push is a handoff, not a task. Do not work around it by patching the parent's code inside your child branch, which produces a diff the child's reviewer did not ask for and a conflict the moment the parent moves.
 2. Rebase the child branch onto the updated base and force-push with `--force-with-lease`.
 3. Re-run the full validation gate on the rebased child; a clean base does not vouch for it.
 4. Reply and resolve on the PR whose thread the finding is on, naming the commit even though it lives on the other branch.
