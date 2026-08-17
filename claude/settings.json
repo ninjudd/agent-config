@@ -7,17 +7,6 @@
     "defaultMode": "auto"
   },
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "trip on"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [
