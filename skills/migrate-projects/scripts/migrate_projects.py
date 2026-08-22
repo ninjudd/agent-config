@@ -365,6 +365,13 @@ def repair_markdown_links(root: Path, report: Report) -> None:
         if entry.kind == "reference" and entry.destination.endswith("/README.md")
     }
     convention = root / "docs" / "projects" / "README.md"
+    folder_moves = []
+    for entry in report.entries:
+        source = Path(entry.source)
+        if "/" not in entry.name and source.name in ("README.md", "overview.md"):
+            folder_moves.append(
+                ((root / entry.destination).parent, (root / entry.source).parent)
+            )
 
     def exact_name_exists(candidate: Path) -> bool:
         try:
@@ -384,7 +391,16 @@ def repair_markdown_links(root: Path, report: Report) -> None:
 
         target: Optional[Path] = None
         target_path = Path(unquote(parsed.path))
-        if target_path.name in ("README.md", "overview.md"):
+        for destination_root, source_root in folder_moves:
+            try:
+                original_path = source_root / path.relative_to(destination_root)
+            except ValueError:
+                continue
+            original_target = (original_path.parent / unquote(parsed.path)).resolve()
+            if original_target == convention.resolve():
+                target = convention
+            break
+        if target is None and target_path.name in ("README.md", "overview.md"):
             lowercase_entry = current.with_name("readme.md")
             if exact_name_exists(lowercase_entry):
                 target = lowercase_entry

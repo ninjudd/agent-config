@@ -116,7 +116,10 @@ class MigrationTests(unittest.TestCase):
             "docs/projects/all/folder/child/README.md",
             legacy_plan("Stalled", "Child"),
         )
-        self.write("docs/projects/all/folder/design.md", "# Design\n")
+        self.write(
+            "docs/projects/all/folder/design.md",
+            "# Design\n\nSee [convention](../../README.md).\n",
+        )
         self.write(
             "docs/projects/all/folder/notes/deep/note.md",
             "See [project](../../README.md).\n",
@@ -164,6 +167,8 @@ class MigrationTests(unittest.TestCase):
             self.assertTrue(path.exists(), name)
             self.assertIn(f"status: {status}", path.read_text())
         self.assertTrue((self.projects / "folder" / "design.md").exists())
+        design = (self.projects / "folder" / "design.md").read_text()
+        self.assertIn("[convention](../README.md)", design)
         folder = (self.projects / "folder" / "readme.md").read_text()
         self.assertIn("[self](readme.md)", folder)
         self.assertIn("[same](readme.md)", folder)
