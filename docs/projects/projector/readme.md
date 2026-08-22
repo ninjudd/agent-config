@@ -1,10 +1,12 @@
 ---
-status: now
+status: done
 ---
 
 # Turn agent-config into Projector
 
 ## 1. Outcome
+
+**Outcome:** Shipped.
 
 Projector is a framework for getting work done in any Git repository. It keeps
 project intent in Git, gives people and agents one command-line interface for
