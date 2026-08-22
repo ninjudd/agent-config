@@ -12,4 +12,3 @@ or code comment cites them.
 
 Run `projector list` to browse projects and `projector check` to validate the
 tree.
-
