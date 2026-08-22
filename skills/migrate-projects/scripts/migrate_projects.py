@@ -27,7 +27,7 @@ LEGACY_STATUSES = {
 NEW_STATUSES = {"now", "next", "later", "done"}
 TERMINAL = {"Shipped", "Superseded", "Abandoned"}
 LIST_FILES = {"now": "now.md", "next": "next.md", "later": "later.md"}
-LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
+PRIMARY_LINK = re.compile(r"^[ \t]*-[ \t]+\[[^\]]*\]\(([^)]+)\)", re.MULTILINE)
 STATUS = re.compile(r"^(status:[ \t]*)([^#\r\n]*?)([ \t]*(?:#.*)?)$", re.MULTILINE)
 
 
@@ -87,7 +87,7 @@ def list_memberships(projects: Path) -> tuple[dict[str, set[str]], list[str]]:
         path = projects / filename
         if not path.exists():
             continue
-        for raw in LINK.findall(path.read_text(encoding="utf-8")):
+        for raw in PRIMARY_LINK.findall(path.read_text(encoding="utf-8")):
             target = raw.strip().split(maxsplit=1)[0].strip("<>\"'")
             parsed = urlsplit(target)
             if parsed.scheme or parsed.netloc:
@@ -96,14 +96,11 @@ def list_memberships(projects: Path) -> tuple[dict[str, set[str]], list[str]]:
             if not normalized.startswith("all/"):
                 continue
             name = normalized[4:].rstrip("/")
-            if name.endswith("/README.md"):
-                name = name[: -len("/README.md")]
+            if name.endswith(("/README.md", "/overview.md")):
+                name = name.rsplit("/", 1)[0]
             elif name.endswith(".md"):
                 name = name[:-3]
             memberships.setdefault(name, set()).add(status)
-    for name, values in memberships.items():
-        if len(values) > 1:
-            errors.append(f"{name}: appears in multiple lists: {', '.join(sorted(values))}")
     return memberships, errors
 
 
@@ -120,20 +117,22 @@ def inventory(root: Path) -> Report:
 
     for path in sorted(all_dir.glob("*.md")):
         sources[path.stem] = path
-    for path in exact_files(all_dir, "README.md"):
-        name = path.parent.relative_to(all_dir).as_posix()
-        if name in sources:
-            errors.append(f"{name}: both file-shaped and folder-shaped plans exist")
-        sources[name] = path
+    for filename in ("README.md", "overview.md"):
+        for path in exact_files(all_dir, filename):
+            name = path.parent.relative_to(all_dir).as_posix()
+            if name in sources:
+                errors.append(f"{name}: multiple legacy project entry points exist")
+            else:
+                sources[name] = path
 
     for child in all_dir.iterdir():
         if child.is_dir() and child.name not in sources:
-            errors.append(f"{child.name}: folder has no top-level README.md")
+            errors.append(f"{child.name}: folder has no top-level README.md or overview.md")
         elif child.is_file() and child.suffix != ".md":
             errors.append(f"{child.name}: unrecognized file at the root of all/")
 
     for name, source in sorted(sources.items()):
-        if source.name == "README.md" and "/" in name:
+        if source.parent != all_dir and "/" in name:
             top = name.split("/", 1)[0]
             if top not in sources:
                 errors.append(f"{name}: nested project has no top-level project entry point")
@@ -147,6 +146,10 @@ def inventory(root: Path) -> Report:
         old_status = read_status(source)
         values = memberships.get(name, set())
         membership = next(iter(values)) if len(values) == 1 else None
+        if len(values) > 1 and old_status not in TERMINAL | {"Reference"}:
+            errors.append(
+                f"{name}: appears in multiple lists: {', '.join(sorted(values))}"
+            )
         kind = "project"
         new_status: Optional[str]
 
@@ -171,7 +174,7 @@ def inventory(root: Path) -> Report:
             errors.append(f"{name}: unknown lifecycle status {old_status!r}")
 
         relative_source = source.relative_to(root).as_posix()
-        folder_shaped = source.name == "README.md"
+        folder_shaped = source.parent != all_dir
         if kind == "reference":
             top = name.split("/", 1)[0]
             if "/" in name:
@@ -288,7 +291,7 @@ def apply(root: Path, report: Report) -> None:
     moved_folders: set[str] = set()
     for entry in sorted(report.entries, key=lambda item: (item.name.count("/"), item.name)):
         source = root / entry.source
-        if source.name == "README.md":
+        if source.parent != projects / "all":
             top = entry.name.split("/", 1)[0]
             if top not in moved_folders:
                 source_folder = projects / "all" / top
@@ -313,6 +316,12 @@ def apply(root: Path, report: Report) -> None:
             replacements[f"all/{top}/".encode()] = (
                 f"../{top}/".encode() if entries[top].kind == "reference" else f"{top}/".encode()
             )
+            replacements[entry.source.encode()] = entry.destination.encode()
+            old_relative = f"all/{entry.name}/{source.name}".encode()
+            if entry.kind == "reference":
+                replacements[old_relative] = f"../{entry.name}/README.md".encode()
+            else:
+                replacements[old_relative] = f"{entry.name}/readme.md".encode()
         elif entry.kind == "reference":
             destination = root / entry.destination
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -328,12 +337,11 @@ def apply(root: Path, report: Report) -> None:
 
     for entry in report.entries:
         destination = root / entry.destination
-        has_exact_entry = destination.parent.exists() and any(
-            child.name == "readme.md" for child in destination.parent.iterdir()
-        )
-        if destination.name == "readme.md" and not has_exact_entry:
-            legacy = destination.with_name("README.md")
-            move_case_safely(root, legacy, destination)
+        source_name = Path(entry.source).name
+        if source_name in ("README.md", "overview.md"):
+            legacy = destination.with_name(source_name)
+            if legacy != destination and legacy.exists():
+                move_case_safely(root, legacy, destination)
         if entry.kind == "reference":
             remove_reference_status(destination)
         else:

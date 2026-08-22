@@ -73,9 +73,16 @@ class MigrationTests(unittest.TestCase):
         return code, stdout.getvalue(), stderr.getvalue()
 
     def test_dry_run_and_apply_cover_legacy_layouts_and_statuses(self) -> None:
-        self.write("docs/projects/now.md", "- [Alpha](all/alpha.md)\n")
+        self.write(
+            "docs/projects/now.md",
+            "Write plans in [all](all/).\n\n- [Alpha](all/alpha.md)\n",
+        )
         self.write("docs/projects/next.md", "- [Folder](all/folder/README.md)\n")
-        self.write("docs/projects/later.md", "- [No status](all/no-status.md)\n")
+        self.write(
+            "docs/projects/later.md",
+            "- [No status](all/no-status.md)\n"
+            "- **Related idea** — see [Alpha](all/alpha.md).\n",
+        )
         self.write("docs/projects/all/alpha.md", legacy_plan("Draft", "Alpha"))
         self.write("docs/projects/all/active.md", legacy_plan("Active", "Active"))
         self.write("docs/projects/all/blocked.md", legacy_plan("Blocked", "Blocked"))
@@ -84,6 +91,11 @@ class MigrationTests(unittest.TestCase):
         self.write("docs/projects/all/superseded.md", legacy_plan("Superseded", "Superseded"))
         self.write("docs/projects/all/abandoned.md", legacy_plan("Abandoned", "Abandoned"))
         self.write("docs/projects/all/reference.md", legacy_plan("Reference", "Reference"))
+        self.write(
+            "docs/projects/all/decisions/overview.md",
+            legacy_plan("Reference", "Decisions"),
+        )
+        self.write("docs/projects/all/decisions/note.md", "# Note\n")
         self.write("docs/projects/all/no-status.md", legacy_plan(None, "No status"))
         self.write("docs/projects/all/folder/README.md", legacy_plan("Draft", "Folder"))
         self.write(
@@ -139,6 +151,10 @@ class MigrationTests(unittest.TestCase):
         reference = self.root / "docs" / "reference.md"
         self.assertTrue(reference.exists())
         self.assertNotIn("status:", reference.read_text())
+        decisions = self.root / "docs" / "decisions" / "README.md"
+        self.assertTrue(decisions.exists())
+        self.assertNotIn("status:", decisions.read_text())
+        self.assertTrue((self.root / "docs" / "decisions" / "note.md").exists())
         self.assertIn("docs/projects/alpha/readme.md", (self.root / "notes.txt").read_text())
         self.assertIn("docs/projects/folder/design.md", (self.root / "notes.txt").read_text())
         self.assertIn(
