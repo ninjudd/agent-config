@@ -28,8 +28,8 @@ notes, or other files when the work needs them; none are required.
 
 Use the exact lowercase name. Uppercase `README.md` remains the conventional
 entry point for the documentation root and non-project directories; lowercase
-`readme.md` identifies a Projector project. `projector check` enforces this
-distinction, including on case-insensitive filesystems.
+`readme.md` identifies a Projector project. `projector check` will enforce this
+distinction once the CLI ships. Until then, maintain the casing by hand.
 
 The path relative to `docs/projects/` is the project's name. In the example,
 the two project names are `cool-new-feature` and
@@ -60,6 +60,13 @@ Use one of these values:
 - `later`: The project is recorded but not scheduled.
 - `done`: The project no longer needs work. State whether it shipped, was
   abandoned, or was superseded in the project plan.
+
+These values supersede the older `Draft`, `Active`, `Blocked`, `Stalled`,
+`Shipped`, `Superseded`, `Abandoned`, and `Reference` lifecycle keywords. For
+the plan review gate, `now` is the only value that claims the project is
+executable; it replaces the readiness claim previously made by `Active` and
+`Blocked`. The `next` and `later` values make no readiness claim. The `done`
+value claims the work has a recorded outcome.
 
 Add `owner` only in a repository where more than one person could own the
 project. Add other metadata only after a command or workflow needs it. The file

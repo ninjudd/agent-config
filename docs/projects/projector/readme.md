@@ -1,5 +1,5 @@
 ---
-status: now
+status: next
 ---
 
 # Turn agent-config into Projector
@@ -76,11 +76,22 @@ the shared queue files and proposed queue directories. A completed project's
 plan records whether it shipped, was abandoned, or was superseded. Projector
 can add a separate resolution field later if real queries require one.
 
+This vocabulary also supersedes the older lifecycle keywords. `now` replaces
+the readiness claim made by `Active` and `Blocked`; `next` and `later` make no
+readiness claim; and `done` records the outcomes previously represented by
+`Shipped`, `Superseded`, and `Abandoned`. Section 8 defines the complete
+migration, including `Draft`, `Stalled`, and `Reference`.
+
 Use lowercase `readme.md` so GitHub renders the project plan when you browse its
 directory while the filename remains subtly distinct from a conventional
 uppercase `README.md`. The exact casing is part of the format. Projector checks
 both directory entries and tracked Git paths rather than trusting
 case-insensitive path lookup when it validates the name.
+
+This choice intentionally supersedes the existing `AGENTS.md` rule that names
+uppercase `README.md` as a project folder's entry point. The transformation in
+section 7 rewrites that rule and the status vocabulary together so installed
+instructions and Projector's public convention cannot disagree.
 
 Number the sections in a plan and never renumber them. Because status changes
 do not move the directory, a citation such as
@@ -134,10 +145,12 @@ The commands behave as follows:
   usable plan, incorrect `readme.md` casing, duplicate or ambiguous discovery
   results, malformed Markdown links between project files, and invalid nesting.
 
-Mutation commands show the exact files they changed. They preserve unrelated
-frontmatter and file formatting, fail rather than overwrite uncommitted edits,
-and make no commits. Non-interactive use requires all choices as flags and
-never opens an editor.
+Mutation commands show the exact files they changed. They make the narrowest
+textual edit and preserve all unrelated frontmatter, formatting, and
+uncommitted content. They fail if the target changed after the command read it
+or if the update would require rewriting unrelated content. They make no
+commits. Non-interactive use requires all choices as flags and never opens an
+editor.
 
 JSON output has a versioned shape, uses stdout only for data, and sends
 diagnostics to stderr. Exit codes distinguish invalid project data, a missing
@@ -258,8 +271,10 @@ workflow from personal configuration:
    CLI and separate Claude Code and Codex plugin packages around the shared
    skills. Installing Projector must not replace a user's complete Claude or
    Codex configuration directories.
-3. Reduce this repository's `AGENTS.md` to contributor guidance for Projector.
-   Move personal global instructions and machine-local configuration to
+3. Rewrite the public `AGENTS.md` project convention to use lowercase
+   `readme.md` and the four new statuses. Keep that reusable convention in
+   Projector, reduce the rest of the file to contributor guidance, and move
+   only personal global instructions and machine-local configuration to
    `ninjudd/agent-config-private`.
 4. Copy `skills/gog/` to `ninjudd/agent-config-private`, verify the private
    install sees it, and then remove it from Projector. The copy and removal must
@@ -286,19 +301,29 @@ For each old project, migration performs these steps:
 1. Read list membership and status frontmatter before changing any paths.
 2. Convert `all/name.md` or `all/name/README.md` to `name/readme.md` with
    `git mv`.
-3. Map list membership to `status: now`, `status: next`, or `status: later`.
-   Map shipped, superseded, and abandoned work to `status: done` and retain its
-   precise outcome in the body.
-4. Preserve supplemental files and existing nested project structure.
-5. Rewrite inbound path references in documentation and code comments.
-6. Remove the old list files and `all/` only after every project is accounted
+3. Map `Shipped`, `Superseded`, and `Abandoned` to `status: done`, regardless
+   of list membership, and retain the precise outcome in the body. Move a
+   `Reference` document to ordinary `docs/`, because it has no project
+   lifecycle.
+4. For the remaining projects, map list membership to `now`, `next`, or
+   `later`. When no list contains one, map `Active` and `Blocked` to `now`, and
+   map `Draft` and `Stalled` to `later`. Preserve a blocker explanation in the
+   body even when its scheduling status is `next` or `later`.
+5. Use list membership for a project with no lifecycle keyword. Stop for manual
+   classification when a project has neither a recognized keyword nor list
+   membership; do not guess.
+6. Preserve supplemental files and existing nested project structure.
+7. Rewrite inbound path references in documentation and code comments.
+8. Remove the old list files and `all/` only after every project is accounted
    for.
-7. Run `projector check`, then compare an `rg` reference sweep with
+9. Run `projector check`, then compare an `rg` reference sweep with
    `command grep -rl` before declaring the migration complete.
 
-The CLI may automate this as `projector migrate`, but the migration contract
-comes before that command. A dry run must report every proposed mapping and
-refuse ambiguous list membership rather than guess.
+The first release implements this migration as a temporary `migrate-projects`
+skill built on the public CLI and Git commands, not as a permanent
+`projector migrate` command. Its dry run reports every proposed mapping and
+refuses ambiguous input rather than guessing. Promote migration into the CLI
+only if ongoing use proves it is a durable operation.
 
 ## 9. Implementation sequence
 
@@ -353,7 +378,8 @@ Projector is ready for its first release when all of these are true:
 
 ## 11. Decisions
 
-- **Store status in frontmatter.** This avoids shared queue files and path churn.
+- **Store status in frontmatter.** This avoids shared queue files and path
+  churn.
   Queue directories and symlinks were rejected because both create a second
   representation of state, and moving between queue directories breaks links.
 - **Put projects directly under `docs/projects/`.** An `all/` segment provides
@@ -373,6 +399,14 @@ Projector is ready for its first release when all of these are true:
 - **Keep MCP optional.** It can expose the same project operations locally or
   remotely when a server adds value, but it does not contain the skills and is
   not required for local Git work.
+- **Keep optional metadata in prose first.** Completion outcomes, tags, and
+  dependencies become structured fields only after a real query needs them.
+- **Keep policy at the repository boundary.** Shared skills read project rules
+  and identities from repository instructions or explicit user input. Personal
+  defaults remain in host configuration and never become Projector policy.
+- **Migrate through a temporary skill first.** The initial migration uses
+  public CLI primitives and Git; it becomes a permanent CLI command only if the
+  workflow remains useful after the known repositories move.
 - **Separate reusable workflow from private configuration.** Projector remains
   portable, while `agent-config-private` can keep personal tools and policy.
 
@@ -382,9 +416,3 @@ Projector is ready for its first release when all of these are true:
   cross-platform installation while preserving a single dependable CLI?
 - What repository layout lets both host manifests package the same skill files
   without copying them into generated trees?
-- Where should portable skill configuration end and repository-specific
-  `AGENTS.md` policy begin, especially for GitHub reviewer identity?
-- Does real use require structured completion outcomes, tags, or dependencies,
-  or can those remain prose until a query proves their value?
-- Should migration ship as a permanent CLI command or as a temporary skill
-  built on lower-level Projector commands?
