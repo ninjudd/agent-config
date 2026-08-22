@@ -16,8 +16,9 @@ The finished repository has three primary parts:
 - A convention for project plans under `docs/projects/`.
 - A `projector` CLI for finding, viewing, creating, editing, validating, and
   completing projects.
-- Agent skills for planning and executing projects and for running code review
-  and fix loops.
+- Portable Agent Skills for planning and executing projects and for running
+  code review and fix loops, distributed through both Claude Code and Codex
+  plugins.
 
 The repository is no longer the public home for one person's global agent
 configuration. Personal and machine-specific material belongs in
@@ -41,6 +42,9 @@ Projector follows these principles:
 - **Skills express workflows; the CLI supplies mechanics.** Skills tell an
   agent how to plan, execute, review, and finish work. They call the same
   commands a person can inspect and run.
+- **Claude Code and Codex are equal targets.** Projector authors each portable
+  skill once and keeps host-specific packaging or enhancements outside the
+  shared workflow.
 - **Repository policy stays local.** Projector provides useful defaults without
   embedding one user's GitHub accounts, home-directory layout, or review rules.
 
@@ -155,7 +159,62 @@ remain `now` after one nested project becomes `done`. The CLI displays the
 hierarchy and can roll up child counts, but it never infers or rewrites a
 parent's status from its children.
 
-## 6. Agent skills
+## 6. Portable skills and plugins
+
+Projector treats its CLI, project format, templates, and Agent Skills as the
+portable core. Claude Code and Codex each receive a thin plugin package around
+that core. Neither host's manifest or extension system becomes the source of
+truth for a workflow.
+
+Both products use a plugin as the packaging layer for related skills and an
+optional MCP server. OpenAI documents a plugin as one or more skills, an MCP
+server, or both in its
+[plugin architecture](https://developers.openai.com/plugins/concepts/plugins).
+Claude Code likewise packages skills and optional MCP servers, along with
+host-specific features such as hooks and monitors, in its
+[plugin format](https://code.claude.com/docs/en/plugins).
+
+The source has this conceptual shape:
+
+```text
+Projector
+├── shared Agent Skills
+├── shared CLI, schemas, and templates
+├── Claude Code plugin packaging
+├── Codex plugin packaging
+└── optional shared MCP server
+```
+
+Write every shared `SKILL.md` against the Agent Skills features supported by
+both hosts. Put host-specific frontmatter, hooks, monitors, agents, or other
+enhancements in its packaging layer, and do not make a core workflow depend on
+them. Test the same source skill in both Claude Code and Codex before release.
+
+Install `projector` as an ordinary executable available on `PATH`. A host
+plugin may help install or locate it, but a shared skill must not rely on
+Claude-specific executable injection or a Codex-specific runtime. The CLI
+remains independently useful to a person and to any shell-capable agent.
+
+An MCP server is an optional capability adapter, not the package that contains
+the skills. Add one when a host needs structured tools without shell access,
+authentication to a remote service, shared infrastructure, or persistent
+server-side behavior. A local server can call the same project library as the
+CLI, while a remote server can implement the same contract against a hosted
+repository.
+
+Design the versioned CLI JSON so these mappings remain mechanical:
+
+```text
+projector list --json    -> project_list
+projector show --json    -> project_get
+projector create --json  -> project_create
+projector status --json  -> project_set_status
+projector check --json   -> project_validate
+```
+
+Do not require MCP for the first release. Claude Code and Codex must both be
+able to complete the core project workflows with the shared skills and local
+CLI alone.
 
 The existing review and fix loops remain core Projector capabilities, but they
 must become portable. Their current instructions assume the `ninjudd` author
@@ -196,8 +255,9 @@ workflow from personal configuration:
 1. Replace the agent-config README with the Projector product overview and
    document installation, adoption, and the project format.
 2. Replace the global-config installer with distribution for the `projector`
-   CLI and reusable skills. Installing Projector must not replace a user's
-   complete Claude or Codex configuration directories.
+   CLI and separate Claude Code and Codex plugin packages around the shared
+   skills. Installing Projector must not replace a user's complete Claude or
+   Codex configuration directories.
 3. Reduce this repository's `AGENTS.md` to contributor guidance for Projector.
    Move personal global instructions and machine-local configuration to
    `ninjudd/agent-config-private`.
@@ -207,7 +267,8 @@ workflow from personal configuration:
 5. Generalize the review and fix skills without weakening their exact-head,
    separate-reviewer, verified-finding, or never-merge safeguards.
 6. Add the project workflow skills after the CLI contract they depend on is
-   covered by tests.
+   covered by tests, then exercise the same skill source in Claude Code and
+   Codex.
 7. Remove agent-config placeholders and compatibility behavior after the new
    install path covers every reusable component that remains.
 
@@ -251,9 +312,10 @@ Build Projector in this order:
 3. Implement and test migration from the current convention on representative
    repository fixtures.
 4. Add the three project workflow skills and generalize the review and fix
-   loops against the CLI and repository-local configuration.
-5. Rework installation and documentation, move private content out, and test a
-   clean install plus an upgrade from agent-config.
+   loops against the CLI and repository-local configuration. Validate the
+   shared skills through both host plugin packages.
+5. Rework installation and documentation, move private content out, and test
+   clean Claude Code and Codex installs plus an upgrade from agent-config.
 6. Adopt Projector in one existing repository, use the result to correct the
    migration, and then migrate the remaining repositories.
 
@@ -279,6 +341,9 @@ Projector is ready for its first release when all of these are true:
   casing, ambiguous nesting, and broken project links.
 - The project skills can plan, start, update, and finish a real project using
   only the public CLI contract.
+- Claude Code and Codex load the same source skills through their own plugin
+  packages and produce equivalent project changes from the same fixtures.
+- Neither host requires an MCP server to complete the core workflows.
 - The review and fix loops work without hard-coded personal identities and
   retain their existing safety guarantees.
 - `gog` and other personal configuration are installed from
@@ -303,6 +368,11 @@ Projector is ready for its first release when all of these are true:
   identity change with a reference sweep.
 - **Keep one source of truth.** The CLI does not generate tracked indexes,
   status links, or cache files.
+- **Share skill source across Claude Code and Codex.** Host plugins are
+  distribution adapters, not forks of the workflows.
+- **Keep MCP optional.** It can expose the same project operations locally or
+  remotely when a server adds value, but it does not contain the skills and is
+  not required for local Git work.
 - **Separate reusable workflow from private configuration.** Projector remains
   portable, while `agent-config-private` can keep personal tools and policy.
 
@@ -310,6 +380,8 @@ Projector is ready for its first release when all of these are true:
 
 - Which implementation language and packaging route provide the simplest
   cross-platform installation while preserving a single dependable CLI?
+- What repository layout lets both host manifests package the same skill files
+  without copying them into generated trees?
 - Where should portable skill configuration end and repository-specific
   `AGENTS.md` policy begin, especially for GitHub reviewer identity?
 - Does real use require structured completion outcomes, tags, or dependencies,
