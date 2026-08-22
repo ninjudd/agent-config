@@ -10,6 +10,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = (
@@ -75,15 +76,24 @@ class MigrationTests(unittest.TestCase):
     def test_dry_run_and_apply_cover_legacy_layouts_and_statuses(self) -> None:
         self.write(
             "docs/projects/now.md",
-            "Write plans in [all](all/).\n\n- [Alpha](all/alpha.md)\n",
+            "Write plans in [all](all/).\n\n"
+            "- [Alpha](all/alpha.md)\n"
+            "- [Shipped](all/shipped.md)\n",
         )
         self.write("docs/projects/next.md", "- [Folder](all/folder/README.md)\n")
         self.write(
             "docs/projects/later.md",
             "- [No status](all/no-status.md)\n"
+            "- [Shipped](all/shipped.md)\n"
+            "- [Reference](all/reference.md)\n"
             "- **Related idea** — see [Alpha](all/alpha.md).\n",
         )
-        self.write("docs/projects/all/alpha.md", legacy_plan("Draft", "Alpha"))
+        self.write(
+            "docs/projects/all/alpha.md",
+            legacy_plan("Draft", "Alpha")
+            + "See [Active](active.md), [guide](../guide.md), and [later](../later.md).\n",
+        )
+        self.write("docs/guide.md", "# Guide\n")
         self.write("docs/projects/all/active.md", legacy_plan("Active", "Active"))
         self.write("docs/projects/all/blocked.md", legacy_plan("Blocked", "Blocked"))
         self.write("docs/projects/all/stalled.md", legacy_plan("Stalled", "Stalled"))
@@ -107,6 +117,7 @@ class MigrationTests(unittest.TestCase):
             "notes.txt",
             "See docs/projects/all/alpha.md and docs/projects/all/folder/design.md.\n",
         )
+        self.write("install/alpha.md", "Keep install/alpha.md unchanged.\n")
         (self.root / "binary-notes.md").write_bytes(
             b"before\0docs/projects/all/alpha.md after\n"
         )
@@ -115,8 +126,9 @@ class MigrationTests(unittest.TestCase):
         code, stdout, stderr = self.invoke("--json")
         report = json.loads(stdout)
 
-        self.assertEqual(0, code, stderr)
         self.assertEqual([], report["errors"])
+        self.assertEqual(0, code, stderr)
+        self.assertTrue(report["rewrites"])
         mapped = {entry["name"]: entry for entry in report["entries"]}
         self.assertEqual("now", mapped["alpha"]["new_status"])
         self.assertEqual("next", mapped["folder"]["new_status"])
@@ -148,6 +160,14 @@ class MigrationTests(unittest.TestCase):
         self.assertFalse((self.projects / "now.md").exists())
         self.assertIn("lowercase `readme.md`", (self.projects / "README.md").read_text())
         self.assertIn("**Outcome:** Shipped.", (self.projects / "shipped" / "readme.md").read_text())
+        self.assertIn(
+            "**Outcome:** Superseded.",
+            (self.projects / "superseded" / "readme.md").read_text(),
+        )
+        self.assertIn(
+            "**Outcome:** Abandoned.",
+            (self.projects / "abandoned" / "readme.md").read_text(),
+        )
         reference = self.root / "docs" / "reference.md"
         self.assertTrue(reference.exists())
         self.assertNotIn("status:", reference.read_text())
@@ -157,9 +177,25 @@ class MigrationTests(unittest.TestCase):
         self.assertTrue((self.root / "docs" / "decisions" / "note.md").exists())
         self.assertIn("docs/projects/alpha/readme.md", (self.root / "notes.txt").read_text())
         self.assertIn("docs/projects/folder/design.md", (self.root / "notes.txt").read_text())
+        alpha = (self.projects / "alpha" / "readme.md").read_text()
+        self.assertIn("[Active](../active/readme.md)", alpha)
+        self.assertIn("[guide](../../guide.md)", alpha)
+        self.assertIn("[later](../README.md)", alpha)
         self.assertIn(
             b"docs/projects/alpha/readme.md", (self.root / "binary-notes.md").read_bytes()
         )
+        self.assertEqual(
+            "Keep install/alpha.md unchanged.\n",
+            (self.root / "install" / "alpha.md").read_text(),
+        )
+        status = subprocess.run(
+            ["git", "-C", str(self.root), "status", "--short"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        self.assertIn("R", status)
+        self.assertIn("M  docs/projects/README.md", status)
 
     def test_ambiguous_membership_refuses_to_apply(self) -> None:
         self.write("docs/projects/now.md", "- [Alpha](all/alpha.md)\n")
@@ -193,6 +229,84 @@ class MigrationTests(unittest.TestCase):
 
         self.assertEqual(65, code)
         self.assertIn("neither status nor list membership", " ".join(json.loads(stdout)["errors"]))
+
+    def test_unknown_status_is_not_masked_by_list_membership(self) -> None:
+        self.write("docs/projects/now.md", "- [Odd](all/odd.md)\n")
+        self.write("docs/projects/all/odd.md", legacy_plan("Shiped", "Odd"))
+        self.commit_fixture()
+
+        code, stdout, _ = self.invoke("--json")
+
+        self.assertEqual(65, code)
+        self.assertIn("unknown lifecycle status", " ".join(json.loads(stdout)["errors"]))
+
+    def test_symlinked_plan_is_refused_before_apply(self) -> None:
+        outside = self.root.parent / f"{self.root.name}-outside.md"
+        outside.write_text(legacy_plan("Active", "Outside"))
+        (self.all / "link.md").symlink_to(outside)
+        self.commit_fixture()
+
+        code, stdout, _ = self.invoke("--apply", "--json")
+
+        self.assertEqual(65, code)
+        self.assertIn("symlinks are not allowed", " ".join(json.loads(stdout)["errors"]))
+        self.assertIn("status: Active", outside.read_text())
+        outside.unlink()
+
+    def test_apply_refuses_dirty_files_outside_projects(self) -> None:
+        self.write("docs/projects/all/alpha.md", legacy_plan("Active", "Alpha"))
+        self.write("notes.txt", "Committed.\n")
+        self.commit_fixture()
+        (self.root / "notes.txt").write_text("Uncommitted.\n")
+
+        code, _, stderr = self.invoke("--apply")
+
+        self.assertEqual(65, code)
+        self.assertIn("repository has uncommitted changes", stderr)
+        self.assertTrue((self.all / "alpha.md").exists())
+
+    def test_apply_rolls_back_when_final_validation_fails(self) -> None:
+        self.write(
+            "docs/projects/all/alpha.md",
+            legacy_plan("Active", "Alpha") + "See [missing](never-existed.md).\n",
+        )
+        self.commit_fixture()
+
+        code, _, stderr = self.invoke("--apply")
+
+        self.assertEqual(65, code)
+        self.assertIn("rolled back", stderr)
+        self.assertTrue((self.all / "alpha.md").exists())
+        status = subprocess.run(
+            ["git", "-C", str(self.root), "status", "--porcelain"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        self.assertEqual("", status)
+
+    def test_cli_preflight_runs_before_mutation(self) -> None:
+        self.write("docs/projects/all/alpha.md", legacy_plan("Active", "Alpha"))
+        self.commit_fixture()
+
+        with mock.patch.object(
+            MIGRATE, "projector_command", side_effect=RuntimeError("install projector")
+        ):
+            code, _, stderr = self.invoke("--apply")
+
+        self.assertEqual(65, code)
+        self.assertIn("install projector", stderr)
+        self.assertTrue((self.all / "alpha.md").exists())
+
+    def test_destination_file_is_reported_before_apply(self) -> None:
+        self.write("docs/projects/all/alpha.md", legacy_plan("Active", "Alpha"))
+        self.write("docs/projects/alpha", "Not a directory.\n")
+        self.commit_fixture()
+
+        code, stdout, _ = self.invoke("--json")
+
+        self.assertEqual(65, code)
+        self.assertIn("destination already exists", " ".join(json.loads(stdout)["errors"]))
 
 
 if __name__ == "__main__":

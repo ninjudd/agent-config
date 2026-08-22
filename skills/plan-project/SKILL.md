@@ -20,14 +20,15 @@ agent can execute without reconstructing the conversation.
 
 ## Write the plan
 
-Use `projector create <name> --status <status> --no-edit`, or edit the existing
-project returned by `projector show <name> --json`. Choose status from the
-user's intent:
+Use `projector create <name> --status <status> --no-edit`, or inspect the
+existing project with `projector show <name> --json`, edit its plan content,
+and change scheduling with `projector status <name> <status>`. Choose status
+from the user's intent:
 
 - Use `later` for recorded work that is not ready or prioritized.
 - Use `next` for a plan ready to become current when capacity opens.
-- Use `now` only when work actually begins and every question that blocks
-  execution is answered or explicitly deferred to implementation.
+- Leave the transition to `now` to `work-project`, which keeps the readiness
+  claim with the implementation pull request.
 - Do not create a new plan as `done`.
 
 Keep the plan proportional to the work. State the outcome, constraints,

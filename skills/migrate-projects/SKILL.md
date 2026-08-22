@@ -36,7 +36,8 @@ The mapping is deliberate:
 
 ## Apply and verify
 
-Require a clean `docs/projects/` worktree, then run:
+Require a completely clean repository and an installed `projector` executable,
+then run:
 
 ```sh
 python3 <skill-directory>/scripts/migrate_projects.py --root . --apply
@@ -46,11 +47,13 @@ command grep -rl 'docs/projects/all\|](all/' .
 git diff --check
 ```
 
-Application uses `git mv` for history, rewrites exact inbound path prefixes
-in tracked files (including files containing NUL bytes), installs the new
+Application refuses symlinks in the legacy tree, uses `git mv` for history,
+rewrites path-boundary-anchored inbound references in tracked files (including
+files containing NUL bytes), repairs relative Markdown links, stages the new
 convention document, and removes the three list files only after every project
-has a disposition. The final `command grep -rl` is required even when `rg`
-finds nothing because `rg` skips binary-classified Markdown.
+has a disposition. A failure rolls the clean worktree back to its starting
+commit. The final `command grep -rl` is required even when `rg` finds nothing
+because `rg` skips binary-classified Markdown.
 
 Inspect `git status` and the full diff. Do not commit, push, or merge unless
 the repository workflow or user asks for those actions. If the planner reports

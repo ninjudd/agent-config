@@ -80,9 +80,10 @@ claude plugin validate skills
 git diff --check
 ```
 
-Also run the Codex plugin validator and the skill validator when you change a
-manifest or skill. Those validators require PyYAML; install it in a temporary
-environment rather than adding it as a Projector runtime dependency.
+The packaging tests validate both plugin manifests and their exact published
+skill set. `claude plugin validate .` validates the marketplace, while
+`claude plugin validate skills` validates the skill tree. Codex has no separate
+public validation command.
 
 Test mutation behavior in temporary Git repositories. Include exact casing,
 nested projects, dirty-file preservation, ambiguous input, and binary

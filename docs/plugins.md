@@ -57,7 +57,8 @@ the CLI with `pipx`:
 
 Select one component with `cli`, `claude`, or `codex`. The host-only commands
 do not install the CLI, so install it separately before running a project
-workflow.
+workflow. `all` installs each host CLI it finds, skips a missing host, and exits
+69 only when neither Claude Code nor Codex is installed.
 
 ## Upgrade from agent-config
 

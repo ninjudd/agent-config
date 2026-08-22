@@ -113,5 +113,7 @@ Run the validation gate from the repository root:
 ```sh
 PYTHONPATH=src python3 -m unittest discover -v
 PYTHONPATH=src python3 -m projector check
+claude plugin validate .
+claude plugin validate skills
 git diff --check
 ```

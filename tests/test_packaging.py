@@ -6,13 +6,14 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
-REQUIRED_SKILLS = {
+PUBLISHED_SKILLS = {
     "plan-project",
     "work-project",
     "finish-project",
     "migrate-projects",
     "start-review-loop",
     "start-fix-loop",
+    "gh-stack",
 }
 
 
@@ -33,7 +34,7 @@ class PackagingTests(unittest.TestCase):
             path.parent.name
             for path in (ROOT / "skills").glob("*/SKILL.md")
         }
-        self.assertTrue(REQUIRED_SKILLS <= discovered)
+        self.assertEqual(PUBLISHED_SKILLS, discovered)
         self.assertFalse((ROOT / ".mcp.json").exists())
 
     def test_host_marketplaces_resolve_the_root_plugin(self) -> None:
@@ -46,6 +47,8 @@ class PackagingTests(unittest.TestCase):
 
         self.assertEqual(".", claude["plugins"][0]["source"])
         self.assertEqual("./", codex["plugins"][0]["source"]["path"])
+        self.assertEqual("projector", claude["plugins"][0]["name"])
+        self.assertEqual("projector", codex["plugins"][0]["name"])
         self.assertTrue((ROOT / ".claude-plugin" / "plugin.json").exists())
         self.assertTrue((ROOT / ".codex-plugin" / "plugin.json").exists())
 
@@ -57,9 +60,10 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("operator", text)
 
     def test_every_required_skill_has_matching_frontmatter_name(self) -> None:
-        for name in REQUIRED_SKILLS:
+        for name in PUBLISHED_SKILLS:
             lines = (ROOT / "skills" / name / "SKILL.md").read_text().splitlines()
-            self.assertIn(f"name: {name}", lines[:8])
+            closing = lines[1:].index("---") + 1
+            self.assertIn(f"name: {name}", lines[:closing])
 
 
 if __name__ == "__main__":

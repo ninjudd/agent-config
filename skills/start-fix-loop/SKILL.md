@@ -9,6 +9,10 @@ Run a persistent background loop alongside foreground work. Watch only pull
 requests this conversation created or explicitly adopted, and keep watching
 until the user stops the loop.
 
+Watch only the repository containing the current working directory. Covering a
+second repository requires starting this skill from that repository with its
+own tracked set and watcher state.
+
 ## Resolve ownership
 
 The **operator** owns the pull request branches and is the identity allowed to
@@ -35,6 +39,8 @@ because the watcher can see its findings.
 2. Resolve the repository, checked-out branch, exact tracked pull request set,
    each base and head SHA, author, state, review decision, and unresolved review
    threads. Include every layer of a stack created by this conversation.
+   Baseline only already-resolved threads. Never baseline an unresolved thread;
+   every finding already waiting when the loop starts remains outstanding.
 3. Verify the operator can push each tracked branch. Do not test with an empty
    commit or direct push.
 4. Record the tracked `owner/repo#number` set in a persistent recurring goal.
@@ -89,7 +95,7 @@ For every accepted finding, preserve this order:
 1. Commit the validated fix locally.
 2. Reply in its review thread under the operator identity. Name the commit and
    state what was reproduced and changed.
-3. Push the pull request branch.
+3. Push the pull request branch, never its base branch.
 4. Resolve the thread only after the push succeeds.
 5. Re-fetch `reviewThreads` and confirm `isResolved: true`.
 

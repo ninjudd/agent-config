@@ -1,6 +1,6 @@
 ---
 name: start-review-loop
-description: Monitor an operator's open pull requests in the current GitHub repository, review each exact pushed SHA locally, and publish verified findings from a separate reviewer identity. Use when the user asks to keep reviewing current and subsequent PR heads.
+description: Monitor chat-owned pull requests in the current GitHub repository, review each exact pushed SHA locally, and publish verified findings from a separate reviewer identity. Use when the user asks to keep reviewing current and subsequent PR heads.
 ---
 
 # Start Review Loop
@@ -32,18 +32,20 @@ Read access can submit a visible review, but repositories requiring an
 approval from a collaborator need the reviewer to have write access; verify
 that a clean approval changes `reviewDecision` to `APPROVED`.
 
-Watch only the repository containing the current working directory. By default,
-track its open pull requests authored by the operator. An explicit request may
-add another author or named pull request, but widen scope no further. Hold
-validated logins literally in every query; never use `@me`, because its value
-changes with `GH_TOKEN`.
+Watch only the repository containing the current working directory. Track pull
+requests this conversation creates or explicitly adopts; authorship by the
+operator is necessary for ordinary ownership but does not adopt every pull
+request from another session. The watcher may observe the operator's broader
+set, but filter every event through the literal tracked set. Hold validated
+logins literally in every query; never use `@me`, because its value changes
+with `GH_TOKEN`.
 
 ## Establish the loop
 
 1. Read repository instructions and applicable review or GitHub workflow
    skills.
-2. Resolve the repository, checked-out branch, its pull request, every open
-   operator pull request, and the total open count:
+2. Resolve the repository, checked-out branch, the exact chat-owned pull
+   request set, the operator's open pull requests, and the total open count:
 
    ```sh
    gh pr list --author <operator> --state open --limit 200
@@ -78,7 +80,9 @@ For every new head:
 
 1. Confirm the pull request remains open and record its full SHA.
 2. Fetch that commit and create a scratch worktree at it. Never run a
-   reproducer that writes inside the operator's checkout.
+   reproducer that writes inside the operator's checkout. Never discard,
+   restore, or overwrite the operator's dirty or uncommitted work while
+   preparing or cleaning up a review.
 3. Confirm the scratch worktree's `HEAD` equals GitHub's recorded SHA.
 4. Only then post a concise start comment naming the short SHA, under the
    reviewer token.
@@ -122,9 +126,10 @@ answered by building the implementation does not block.
 
 Plans at `next`, `later`, or `done` make no executable-readiness claim, so
 their open questions do not withhold approval. Name the status and questions in
-the review body so the exemption is visible. Resolve status from the nearest
-project's lowercase `readme.md`; supplemental documents carry no independent
-status.
+the review body so the exemption is visible. Run `projector list --json`, match
+the changed path to the longest canonical project directory, and read its state
+with `projector show <name> --json`. Supplemental documents carry no
+independent status.
 
 ## Continue after fixes
 

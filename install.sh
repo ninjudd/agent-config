@@ -96,8 +96,23 @@ show_status() {
 case "${1:-all}" in
   all)
     install_cli
-    install_claude
-    install_codex
+    installed_hosts=0
+    if command -v "$CLAUDE_COMMAND" >/dev/null 2>&1; then
+      install_claude
+      installed_hosts=$((installed_hosts + 1))
+    else
+      printf '%-12s %s\n' "skipped" "Claude Code is not installed"
+    fi
+    if command -v "$CODEX_COMMAND" >/dev/null 2>&1; then
+      install_codex
+      installed_hosts=$((installed_hosts + 1))
+    else
+      printf '%-12s %s\n' "skipped" "Codex is not installed"
+    fi
+    if [ "$installed_hosts" -eq 0 ]; then
+      echo "install.sh: neither Claude Code nor Codex is installed" >&2
+      exit 69
+    fi
     ;;
   cli) install_cli ;;
   claude) install_claude ;;

@@ -12,14 +12,18 @@ ROOT = Path(__file__).parents[1]
 
 class InstallTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory()
         self.user_root = Path(self.temporary.name)
         self.claude = self.user_root / "claude"
         self.codex = self.user_root / "codex"
         self.fake_bin = self.user_root / "bin"
         self.log = self.user_root / "commands.log"
         self.fake_bin.mkdir()
-        for command, executable in (("pipx", "pipx"),):
+        for command, executable in (
+            ("pipx", "pipx"),
+            ("claude", "host-a"),
+            ("codex", "host-b"),
+        ):
             path = self.fake_bin / executable
             path.write_text(
                 "#!/bin/sh\n"
@@ -30,12 +34,13 @@ class InstallTests(unittest.TestCase):
         self.environment = {
             **os.environ,
             "PATH": f"{self.fake_bin}:{os.environ['PATH']}",
+            "HOME": str(self.user_root),
             "PROJECTOR_USER_ROOT": str(self.user_root),
             "PROJECTOR_CLAUDE_DIR": str(self.claude),
             "PROJECTOR_CODEX_DIR": str(self.codex),
             "PROJECTOR_TEST_LOG": str(self.log),
-            "PROJECTOR_CLAUDE_COMMAND": "/usr/bin/true",
-            "PROJECTOR_CODEX_COMMAND": "/usr/bin/true",
+            "PROJECTOR_CLAUDE_COMMAND": str(self.fake_bin / "host-a"),
+            "PROJECTOR_CODEX_COMMAND": str(self.fake_bin / "host-b"),
         }
 
     def tearDown(self) -> None:
@@ -74,6 +79,29 @@ class InstallTests(unittest.TestCase):
         self.assertFalse((self.codex / "AGENTS.md").exists())
         self.assertEqual('{"user": true}\n', settings.read_text())
         self.assertTrue(unrelated.is_symlink())
+        log = self.log.read_text()
+        self.assertIn(f"claude plugin marketplace add {ROOT} --scope user", log)
+        self.assertIn("claude plugin install projector@projector --scope user", log)
+        self.assertIn(f"codex plugin marketplace add {ROOT}", log)
+        self.assertIn("codex plugin add projector@projector", log)
+
+    def test_all_skips_one_missing_host_and_installs_the_other(self) -> None:
+        self.environment["PROJECTOR_CLAUDE_COMMAND"] = "missing-claude"
+
+        result = self.install("all")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("skipped", result.stdout)
+        self.assertIn("codex plugin add projector@projector", self.log.read_text())
+
+    def test_all_fails_when_both_hosts_are_missing(self) -> None:
+        self.environment["PROJECTOR_CLAUDE_COMMAND"] = "missing-claude"
+        self.environment["PROJECTOR_CODEX_COMMAND"] = "missing-codex"
+
+        result = self.install("all")
+
+        self.assertEqual(69, result.returncode)
+        self.assertIn("neither Claude Code nor Codex", result.stderr)
 
     def test_cli_install_uses_an_isolated_pipx_application(self) -> None:
         result = self.install("cli")

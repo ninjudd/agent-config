@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
-from importlib import resources
 from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote, urlsplit
@@ -28,6 +29,7 @@ NEW_STATUSES = {"now", "next", "later", "done"}
 TERMINAL = {"Shipped", "Superseded", "Abandoned"}
 LIST_FILES = {"now": "now.md", "next": "next.md", "later": "later.md"}
 PRIMARY_LINK = re.compile(r"^[ \t]*-[ \t]+\[[^\]]*\]\(([^)]+)\)", re.MULTILINE)
+MARKDOWN_LINK = re.compile(r"(?<!!)(\[[^\]]*\]\()([^)]+)(\))", re.DOTALL)
 STATUS = re.compile(r"^(status:[ \t]*)([^#\r\n]*?)([ \t]*(?:#.*)?)$", re.MULTILINE)
 
 
@@ -47,6 +49,7 @@ class Report:
     entries: list[Entry]
     removals: list[str]
     errors: list[str]
+    rewrites: list[dict[str, object]]
 
     def public(self) -> dict[str, object]:
         return {
@@ -54,6 +57,7 @@ class Report:
             "entries": [asdict(entry) for entry in self.entries],
             "removals": self.removals,
             "errors": self.errors,
+            "rewrites": self.rewrites,
         }
 
 
@@ -113,7 +117,11 @@ def inventory(root: Path) -> Report:
 
     if not all_dir.is_dir():
         errors.append(f"missing legacy directory: {all_dir.relative_to(root)}")
-        return Report(entries, [], errors)
+        return Report(entries, [], errors, [])
+
+    for path in all_dir.rglob("*"):
+        if path.is_symlink():
+            errors.append(f"{path.relative_to(root)}: symlinks are not allowed in all/")
 
     for path in sorted(all_dir.glob("*.md")):
         sources[path.stem] = path
@@ -153,7 +161,10 @@ def inventory(root: Path) -> Report:
         kind = "project"
         new_status: Optional[str]
 
-        if old_status in TERMINAL:
+        if old_status is not None and old_status not in LEGACY_STATUSES | NEW_STATUSES:
+            new_status = None
+            errors.append(f"{name}: unknown lifecycle status {old_status!r}")
+        elif old_status in TERMINAL:
             new_status = "done"
         elif old_status == "Reference":
             kind = "reference"
@@ -169,9 +180,6 @@ def inventory(root: Path) -> Report:
         elif old_status is None:
             new_status = None
             errors.append(f"{name}: has neither status nor list membership")
-        else:
-            new_status = None
-            errors.append(f"{name}: unknown lifecycle status {old_status!r}")
 
         relative_source = source.relative_to(root).as_posix()
         folder_shaped = source.parent != all_dir
@@ -189,7 +197,11 @@ def inventory(root: Path) -> Report:
 
         destination_path = root / destination
         source_root = source.parent if folder_shaped else source
-        destination_root = destination_path.parent if folder_shaped else destination_path
+        destination_root = (
+            destination_path.parent
+            if folder_shaped or kind == "project"
+            else destination_path
+        )
         if destination_root.exists() and destination_root.resolve() != source_root.resolve():
             errors.append(f"{name}: destination already exists: {destination}")
         entries.append(
@@ -208,7 +220,9 @@ def inventory(root: Path) -> Report:
         for filename in ("README.md", *LIST_FILES.values())
         if (projects / filename).exists()
     ]
-    return Report(entries, removals, sorted(set(errors)))
+    report = Report(entries, removals, sorted(set(errors)), [])
+    report.rewrites = describe_rewrites(root, report)
+    return report
 
 
 def update_status(path: Path, old_status: Optional[str], new_status: str) -> None:
@@ -251,6 +265,77 @@ def move_case_safely(root: Path, source: Path, destination: Path) -> None:
     git(root, "mv", str(temporary.relative_to(root)), str(destination.relative_to(root)))
 
 
+def _replace_path(data: bytes, old: bytes, new: bytes) -> tuple[bytes, int]:
+    suffix = rb"" if old.endswith(b"/") else rb"(?![A-Za-z0-9_-])"
+    pattern = re.compile(rb"(?<![A-Za-z0-9_-])" + re.escape(old) + suffix)
+    return pattern.subn(lambda _: new, data)
+
+
+def reference_replacements(report: Report) -> dict[bytes, bytes]:
+    replacements: dict[bytes, bytes] = {}
+    for entry in report.entries:
+        replacements[entry.source.encode()] = entry.destination.encode()
+        source_name = Path(entry.source).name
+        if source_name in ("README.md", "overview.md"):
+            top = entry.name.split("/", 1)[0]
+            top_entry = next((item for item in report.entries if item.name == top), None)
+            if top_entry is not None:
+                replacements[f"docs/projects/all/{top}/".encode()] = (
+                    f"docs/{top}/"
+                    if top_entry.kind == "reference"
+                    else f"docs/projects/{top}/"
+                ).encode()
+                replacements[f"all/{top}/".encode()] = (
+                    f"../{top}/" if top_entry.kind == "reference" else f"{top}/"
+                ).encode()
+            old = f"all/{entry.name}/{source_name}".encode()
+            new = (
+                f"../{entry.name}/README.md"
+                if entry.kind == "reference"
+                else f"{entry.name}/readme.md"
+            ).encode()
+        else:
+            old = f"all/{entry.name}.md".encode()
+            new = (
+                f"../{entry.name}.md"
+                if entry.kind == "reference"
+                else f"{entry.name}/readme.md"
+            ).encode()
+        replacements[old] = new
+    return replacements
+
+
+def describe_rewrites(root: Path, report: Report) -> list[dict[str, object]]:
+    tracked = git(root, "ls-files", "-z").stdout.split(b"\0")
+    rewrites: list[dict[str, object]] = []
+    for old, new in sorted(reference_replacements(report).items()):
+        touched = 0
+        for raw_path in tracked:
+            if not raw_path:
+                continue
+            path = root / raw_path.decode("utf-8", errors="surrogateescape")
+            if not path.is_file() or path.is_symlink():
+                continue
+            _, count = _replace_path(path.read_bytes(), old, new)
+            touched += int(count > 0)
+        if touched:
+            rewrites.append(
+                {
+                    "old": old.decode("utf-8"),
+                    "new": new.decode("utf-8"),
+                    "files": touched,
+                }
+            )
+    rewrites.append(
+        {
+            "old": "relative Markdown links from moved plans",
+            "new": "paths relative to each permanent destination",
+            "files": "resolved during apply",
+        }
+    )
+    return rewrites
+
+
 def rewrite_references(root: Path, replacements: dict[bytes, bytes]) -> None:
     tracked = git(root, "ls-files", "-z").stdout.split(b"\0")
     ordered = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
@@ -258,35 +343,117 @@ def rewrite_references(root: Path, replacements: dict[bytes, bytes]) -> None:
         if not raw_path:
             continue
         path = root / raw_path.decode("utf-8", errors="surrogateescape")
-        if not path.is_file():
+        if not path.is_file() or path.is_symlink():
             continue
         before = path.read_bytes()
         after = before
         for old, new in ordered:
-            after = after.replace(old, new)
+            after, _ = _replace_path(after, old, new)
         if after != before:
             path.write_bytes(after)
 
 
-def convention_text() -> str:
-    try:
-        return resources.files("projector").joinpath(
-            "templates/project-readme.md"
-        ).read_text(encoding="utf-8")
-    except (ImportError, ModuleNotFoundError) as error:
-        raise RuntimeError("install the projector CLI before applying migration") from error
+def repair_markdown_links(root: Path, report: Report) -> None:
+    projects = {
+        entry.name: root / entry.destination
+        for entry in report.entries
+        if entry.kind == "project"
+    }
+    references = {
+        entry.name: (root / entry.destination).parent
+        for entry in report.entries
+        if entry.kind == "reference" and entry.destination.endswith("/README.md")
+    }
+    convention = root / "docs" / "projects" / "README.md"
+
+    def replacement(path: Path, match: re.Match[str]) -> str:
+        raw = match.group(2)
+        token = raw.strip().split(maxsplit=1)[0].strip("<>\"'")
+        parsed = urlsplit(token)
+        if parsed.scheme or parsed.netloc or not parsed.path:
+            return match.group(0)
+        current = (path.parent / unquote(parsed.path)).resolve()
+        if current.exists():
+            return match.group(0)
+
+        target: Optional[Path] = None
+        target_path = Path(unquote(parsed.path))
+        if target_path.name in LIST_FILES.values():
+            target = convention
+        else:
+            stem = target_path.stem
+            if stem in projects:
+                target = projects[stem]
+            elif target_path.parts and target_path.parts[0] in references:
+                target = references[target_path.parts[0]].joinpath(*target_path.parts[1:])
+            else:
+                candidates = [
+                    candidate
+                    for candidate in (root / "docs").rglob(target_path.name)
+                    if candidate.is_file()
+                ]
+                if len(candidates) == 1:
+                    target = candidates[0]
+        if target is None or not target.exists():
+            return match.group(0)
+
+        relative = Path(os.path.relpath(target, path.parent)).as_posix()
+        if parsed.query:
+            relative += f"?{parsed.query}"
+        if parsed.fragment:
+            relative += f"#{parsed.fragment}"
+        leading = raw[: len(raw) - len(raw.lstrip())]
+        trailing = raw[len(raw.rstrip()) :]
+        stripped = raw.strip()
+        first = stripped.split(maxsplit=1)[0]
+        title = stripped[len(first) :]
+        return (
+            f"{match.group(1)}{leading}{relative}{title}{trailing}{match.group(3)}"
+        )
+
+    for path in sorted((root / "docs").rglob("*.md")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        updated = MARKDOWN_LINK.sub(lambda match: replacement(path, match), text)
+        if updated != text:
+            path.write_text(updated, encoding="utf-8")
+
+
+def projector_command() -> list[str]:
+    executable = shutil.which("projector")
+    if executable:
+        return [executable]
+    if importlib.util.find_spec("projector") is not None:
+        return [sys.executable, "-m", "projector"]
+    raise RuntimeError("install the projector CLI before applying migration")
 
 
 def apply(root: Path, report: Report) -> None:
     if report.errors:
         raise RuntimeError("refusing to apply an ambiguous migration")
-    dirty = git(root, "status", "--porcelain", "--", "docs/projects").stdout
+    command = projector_command()
+    probe = subprocess.run([*command, "--help"], text=True, capture_output=True)
+    if probe.returncode:
+        raise RuntimeError("projector CLI is unavailable or failed its preflight")
+    dirty = git(root, "status", "--porcelain").stdout
     if dirty:
-        raise RuntimeError("docs/projects has uncommitted changes")
+        raise RuntimeError("repository has uncommitted changes")
+
+    try:
+        _apply_changes(root, report, command)
+    except BaseException:
+        git(root, "reset", "--hard", "HEAD", check=False)
+        print("migrate-projects: rolled back to the clean starting commit", file=sys.stderr)
+        raise
+
+
+def _apply_changes(root: Path, report: Report, command: list[str]) -> None:
 
     projects = root / "docs" / "projects"
     entries = {entry.name: entry for entry in report.entries}
-    replacements: dict[bytes, bytes] = {}
+    replacements = reference_replacements(report)
 
     moved_folders: set[str] = set()
     for entry in sorted(report.entries, key=lambda item: (item.name.count("/"), item.name)):
@@ -352,11 +519,19 @@ def apply(root: Path, report: Report) -> None:
         if (root / path).exists():
             git(root, "rm", path)
     (projects / "all").rmdir()
-    (projects / "README.md").write_text(convention_text(), encoding="utf-8")
+    initialized = subprocess.run(
+        [*command, "--root", str(root), "init"], text=True, capture_output=True
+    )
+    if initialized.returncode:
+        raise RuntimeError(
+            f"projector init failed:\n{initialized.stderr or initialized.stdout}"
+        )
+    git(root, "add", "docs/projects/README.md")
 
     rewrite_references(root, replacements)
+    repair_markdown_links(root, report)
     check = subprocess.run(
-        [sys.executable, "-m", "projector", "--root", str(root), "check"],
+        [*command, "--root", str(root), "check"],
         text=True,
         capture_output=True,
     )
@@ -371,6 +546,10 @@ def render(report: Report) -> str:
         lines.append(f"{entry.kind:<9} {entry.name:<32} {status:<9} {entry.destination}")
     for removal in report.removals:
         lines.append(f"remove    {removal}")
+    for rewrite in report.rewrites:
+        lines.append(
+            f"rewrite   {rewrite['old']} -> {rewrite['new']} ({rewrite['files']} files)"
+        )
     for error in report.errors:
         lines.append(f"error     {error}")
     return "\n".join(lines)
@@ -396,7 +575,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if arguments.apply:
             apply(root, report)
         return 0
-    except (RuntimeError, subprocess.CalledProcessError) as error:
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"migrate-projects: {error}", file=sys.stderr)
         return 65
 
