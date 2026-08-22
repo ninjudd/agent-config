@@ -84,7 +84,7 @@ def open_editor(path: Path) -> None:
 
 
 def emit_path(store: ProjectStore, path: Path, json_output: bool, action: str) -> None:
-    relative = path.relative_to(store.root).as_posix()
+    relative = store._relative(path)
     if json_output:
         print(json_text({"action": action, "path": relative}))
     else:
@@ -107,7 +107,7 @@ def run(arguments: argparse.Namespace) -> int:
             print(grouped_projects(projects))
     elif command == "show":
         project = store.resolve(arguments.project)
-        content = project.path.read_text(encoding="utf-8")
+        content = store._read_text(project.path)
         if arguments.json_output:
             print(json_text({"project": {**project.public(store.root), "content": content}}))
         else:
@@ -151,6 +151,9 @@ def main(argv: list[str] | None = None) -> int:
     except ProjectorError as error:
         print(f"projector: {error}", file=sys.stderr)
         return error.exit_code
+    except (OSError, UnicodeDecodeError) as error:
+        print(f"projector: {error}", file=sys.stderr)
+        return 65
 
 
 if __name__ == "__main__":

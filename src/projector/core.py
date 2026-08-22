@@ -28,6 +28,10 @@ class ProjectorError(Exception):
     exit_code = 65
 
 
+class UsageError(ProjectorError):
+    exit_code = 2
+
+
 class ProjectNotFound(ProjectorError):
     exit_code = 66
 
@@ -50,7 +54,10 @@ class Project:
 
     def public(self, root: Path) -> dict[str, object]:
         value = asdict(self)
-        value["path"] = self.path.relative_to(root).as_posix()
+        try:
+            value["path"] = self.path.relative_to(root).as_posix()
+        except ValueError:
+            value["path"] = str(self.path)
         return value
 
 
@@ -78,6 +85,25 @@ def valid_name(name: str) -> bool:
     return bool(name) and all(NAME_PART.fullmatch(part) for part in name.split("/"))
 
 
+def _yaml_scalar(raw: str) -> str:
+    quote: str | None = None
+    escaped = False
+    for index, character in enumerate(raw):
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\" and quote == '"':
+            escaped = True
+            continue
+        if character in ("'", '"'):
+            quote = None if quote == character else character if quote is None else quote
+            continue
+        if character == "#" and quote is None and (index == 0 or raw[index - 1].isspace()):
+            raw = raw[:index]
+            break
+    return raw.strip().strip("\"'")
+
+
 def parse_frontmatter(text: str, path: Path) -> tuple[dict[str, str], int]:
     lines = text.splitlines(keepends=True)
     if not lines or lines[0].rstrip("\r\n") != "---":
@@ -96,7 +122,7 @@ def parse_frontmatter(text: str, path: Path) -> tuple[dict[str, str], int]:
         key, raw = match.groups()
         if key in metadata:
             raise ProjectorError(f"{path}:{index + 1}: duplicate {key!r} field")
-        metadata[key] = raw.strip().strip("\"'")
+        metadata[key] = _yaml_scalar(raw)
     raise ProjectorError(f"{path}: unclosed YAML frontmatter")
 
 
@@ -126,12 +152,13 @@ class ProjectStore:
         relative = path.parent.relative_to(self.projects_dir).as_posix()
         if relative == "." or not valid_name(relative):
             raise ProjectorError(f"{path}: invalid project name {relative!r}")
-        text = path.read_text(encoding="utf-8")
-        metadata, _ = parse_frontmatter(text, path)
+        text = self._read_text(path)
+        display_path = Path(self._relative(path))
+        metadata, _ = parse_frontmatter(text, display_path)
         status = metadata.get("status")
         if status not in STATUSES:
             choices = "|".join(STATUSES)
-            raise ProjectorError(f"{path}: status must be one of {choices}")
+            raise ProjectorError(f"{display_path}: status must be one of {choices}")
         return Project(
             name=relative,
             title=title_from_text(text, relative),
@@ -154,7 +181,10 @@ class ProjectStore:
             return []
         found: dict[str, Project] = {}
         for path in self._entry_points():
-            project = self._project_from_path(path)
+            try:
+                project = self._project_from_path(path)
+            except (ProjectorError, OSError, UnicodeDecodeError):
+                continue
             folded = project.name.casefold()
             if folded in found:
                 raise AmbiguousProject(
@@ -164,26 +194,21 @@ class ProjectStore:
         return sorted(found.values(), key=lambda project: project.name)
 
     def resolve(self, name: str) -> Project:
-        exact = [project for project in self.projects() if project.name == name]
-        if exact:
-            return exact[0]
-        folded = [
-            project for project in self.projects() if project.name.casefold() == name.casefold()
-        ]
-        if len(folded) > 1:
+        candidates = []
+        for path in self._entry_points():
+            relative = path.parent.relative_to(self.projects_dir).as_posix()
+            if relative.casefold() == name.casefold():
+                candidates.append(path)
+        if len(candidates) > 1:
             raise AmbiguousProject(f"ambiguous project: {name}")
-        if folded:
-            return folded[0]
+        if candidates:
+            return self._project_from_path(candidates[0])
         raise ProjectNotFound(f"project not found: {name}")
 
     def init(self) -> Path:
         target = self.projects_dir / "README.md"
-        if self.projects_dir.exists() and any(self.projects_dir.iterdir()):
-            if target.exists():
-                raise ProjectorError(f"project convention already exists: {target}")
-            raise ProjectorError(
-                f"refusing to overwrite an existing project system: {self.projects_dir}"
-            )
+        if target.exists():
+            raise ProjectorError(f"project convention already exists: {target}")
         self.projects_dir.mkdir(parents=True, exist_ok=True)
         template = resources.files("projector").joinpath(
             "templates/project-readme.md"
@@ -194,15 +219,17 @@ class ProjectStore:
     def create(self, name: str, status: str = "later", parent: str | None = None) -> Project:
         if parent:
             if "/" in name or not valid_name(name):
-                raise ProjectorError("--parent requires one valid project name segment")
+                raise UsageError("--parent requires one valid project name segment")
             self.resolve(parent)
             name = f"{parent}/{name}"
         if not valid_name(name):
-            raise ProjectorError(
+            raise UsageError(
                 "project names use lowercase letters, digits, hyphens, and slashes"
             )
         if status not in STATUSES:
             raise ProjectorError(f"invalid status: {status}")
+        if "/" in name:
+            self.resolve(name.rsplit("/", 1)[0])
         path = self.projects_dir / name / "readme.md"
         if path.exists() or any(
             candidate.name.lower() == "readme.md" for candidate in path.parent.glob("*")
@@ -232,7 +259,7 @@ class ProjectStore:
         if status not in STATUSES:
             raise ProjectorError(f"invalid status: {status}")
         project = self.resolve(name)
-        before = project.path.read_text(encoding="utf-8")
+        before = self._read_text(project.path)
         original_stat = project.path.stat()
         metadata, _ = parse_frontmatter(before, project.path)
         if metadata.get("status") == status:
@@ -246,16 +273,22 @@ class ProjectStore:
         current = (current_stat.st_ino, current_stat.st_size, current_stat.st_mtime_ns)
         if signature != current:
             raise ProjectorError(f"{project.path}: changed while it was being read")
-        self._atomic_write(project.path, after)
+        self._atomic_write(project.path, after, signature)
         return self.resolve(name), True
 
     @staticmethod
-    def _atomic_write(path: Path, content: str) -> None:
+    def _atomic_write(
+        path: Path, content: str, expected_signature: tuple[int, int, int]
+    ) -> None:
         descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
         try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as stream:
                 stream.write(content)
             os.chmod(temporary, stat.S_IMODE(path.stat().st_mode))
+            current_stat = path.stat()
+            current = (current_stat.st_ino, current_stat.st_size, current_stat.st_mtime_ns)
+            if current != expected_signature:
+                raise ProjectorError(f"{path}: changed before the update was written")
             os.replace(temporary, path)
         finally:
             if os.path.exists(temporary):
@@ -274,7 +307,7 @@ class ProjectStore:
                 matches.append(
                     {
                         "project": project.name,
-                        "path": project.path.relative_to(self.root).as_posix(),
+                        "path": self._relative(project.path),
                         "line": 0,
                         "text": project.title,
                     }
@@ -293,7 +326,7 @@ class ProjectStore:
                     matches.append(
                         {
                             "project": owner.name,
-                            "path": path.relative_to(self.root).as_posix(),
+                            "path": self._relative(path),
                             "line": line_number,
                             "text": line.strip(),
                         }
@@ -339,9 +372,31 @@ class ProjectStore:
                 )
             seen_case[folded] = relative
 
+        tracked_case: dict[str, str] = {}
         for relative in self._tracked_paths():
             name = Path(relative).name
             full_path = (Path(self._relative(self.projects_dir)) / relative).as_posix()
+            folded = relative.casefold()
+            if folded in tracked_case and tracked_case[folded] != relative:
+                issues.append(
+                    Issue(
+                        "case-collision",
+                        full_path,
+                        f"Git path collides with {tracked_case[folded]}",
+                    )
+                )
+            tracked_case[folded] = relative
+            project_parts = Path(relative).parts[:-1]
+            if name.lower() == "readme.md" and any(
+                not NAME_PART.fullmatch(part) for part in project_parts
+            ):
+                issues.append(
+                    Issue(
+                        "wrong-project-case",
+                        full_path,
+                        "Git records a project directory with invalid or uppercase casing",
+                    )
+                )
             if (
                 name.lower() == "readme.md"
                 and name != "readme.md"
@@ -368,8 +423,12 @@ class ProjectStore:
                     )
                 names[folded] = project.name
                 projects.append(project)
-            except ProjectorError as error:
-                issues.append(Issue("invalid-project", self._relative(path), str(error)))
+            except (ProjectorError, OSError, UnicodeDecodeError) as error:
+                message = str(error)
+                prefix = f"{self._relative(path)}:"
+                if message.startswith(prefix):
+                    message = message[len(prefix) :].lstrip()
+                issues.append(Issue("invalid-project", self._relative(path), message))
 
         for path in sorted(self.projects_dir.rglob("*.md")):
             if any(path == project.path or project.path.parent in path.parents for project in projects):
@@ -378,7 +437,7 @@ class ProjectStore:
 
     def _check_links(self, path: Path) -> list[Issue]:
         issues: list[Issue] = []
-        text = path.read_text(encoding="utf-8")
+        text = self._read_text(path)
         for line_number, line in enumerate(text.splitlines(), 1):
             for raw_target in LINK.findall(line):
                 target = raw_target.strip().split(maxsplit=1)[0].strip("<>\"'")
@@ -394,7 +453,8 @@ class ProjectStore:
                             f"target does not exist: {target}",
                         )
                     )
-            if line.count("](") > len(LINK.findall(line)):
+            without_images = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", line)
+            if without_images.count("](") > len(LINK.findall(without_images)):
                 issues.append(
                     Issue(
                         "malformed-project-link",
@@ -440,6 +500,11 @@ class ProjectStore:
             return path.relative_to(self.root).as_posix()
         except ValueError:
             return str(path)
+
+    @staticmethod
+    def _read_text(path: Path) -> str:
+        with path.open("r", encoding="utf-8", newline="") as stream:
+            return stream.read()
 
 def json_text(payload: dict[str, object]) -> str:
     return json.dumps({"schema_version": 1, **payload}, indent=2, sort_keys=True)

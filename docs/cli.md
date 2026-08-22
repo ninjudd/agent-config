@@ -4,6 +4,17 @@ Projector discovers the Git root from your current directory and reads projects
 under `docs/projects/`. Pass `--root <path>` to select a repository explicitly,
 or `--projects-dir <path>` to use another project-plan directory.
 
+## Adopt a repository
+
+Run `init` once to create `docs/projects/README.md`:
+
+```sh
+projector init
+```
+
+If projects already exist but the convention file is missing, `init` adds only
+that file. It refuses to replace an existing convention file.
+
 ## Browse projects
 
 Run `list` to group projects by status without creating an index:
@@ -33,6 +44,10 @@ projector create invoices --parent payments --status later
 `create` opens the new plan when stdin and stdout are interactive. Pass
 `--no-edit` to leave the generated plan ready for another command. In a
 non-interactive session, Projector never opens an editor.
+
+Run `edit <project>` to open an existing plan with `$VISUAL` or `$EDITOR`.
+`edit` has no `--json` mode because the editor owns the interactive session.
+It exits 69 without a terminal or configured editor.
 
 Change only the status scalar with `status`, or use `done` as a readable
 shorthand:

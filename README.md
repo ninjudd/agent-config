@@ -11,7 +11,7 @@ shared `now.md`, `next.md`, or `later.md` queue.
 ## Install the CLI
 
 Projector requires Python 3.9 or newer. Install an isolated executable with
-`pipx`:
+`pipx` after the first Projector release reaches the default branch:
 
 ```sh
 pipx install git+https://github.com/ninjudd/projector.git
@@ -22,6 +22,7 @@ For local development, install the checkout in editable mode:
 
 ```sh
 python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e .
 .venv/bin/projector --help
 ```
@@ -69,6 +70,10 @@ Use `--json` when an agent or script consumes output. Every JSON response has
 `"schema_version": 1`; diagnostics go to stderr. See [the CLI
 reference](docs/cli.md) and [the project convention](docs/projects/README.md)
 for the complete contracts.
+
+The legacy `install.sh` still installs the pre-Projector agent configuration.
+Use the CLI installation above for this layer; native Claude and Codex plugin
+installation replaces the legacy script in the workflow layer.
 
 ## Develop Projector
 

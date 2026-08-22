@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from projector.cli import main
-from projector.core import ProjectStore
+from projector.core import AmbiguousProject, ProjectStore
 
 
 PLAN = """---
@@ -142,6 +142,43 @@ class DiscoveryTests(RepositoryTestCase):
         self.assertEqual(0, code)
         self.assertEqual("alpha", json.loads(stdout)["projects"][0]["name"])
 
+    def test_absolute_projects_directory_outside_root_emits_a_usable_path(self) -> None:
+        with tempfile.TemporaryDirectory() as plans_directory:
+            plans = Path(plans_directory)
+            (plans / "README.md").write_text("# Plans\n")
+
+            code, stdout, stderr = self.invoke(
+                "--projects-dir",
+                str(plans),
+                "create",
+                "alpha",
+                "--no-edit",
+                "--json",
+            )
+
+            self.assertEqual(0, code, stderr)
+            self.assertEqual(
+                str((plans / "alpha" / "readme.md").resolve()),
+                json.loads(stdout)["path"],
+            )
+
+    def test_invalid_plan_does_not_disable_unrelated_projects(self) -> None:
+        self.plan("good", "now")
+        self.plan("bad", "shipped")
+
+        code, stdout, stderr = self.invoke("list")
+        self.assertEqual(0, code, stderr)
+        self.assertIn("good", stdout)
+        self.assertNotIn("bad", stdout)
+
+        code, stdout, stderr = self.invoke("show", "good")
+        self.assertEqual(0, code, stderr)
+        self.assertIn("# Good", stdout)
+
+        code, _, stderr = self.invoke("show", "bad")
+        self.assertEqual(65, code)
+        self.assertIn("status must be one of", stderr)
+
 
 class MutationTests(RepositoryTestCase):
     def test_create_supports_nested_projects_without_moving_the_parent(self) -> None:
@@ -166,8 +203,15 @@ class MutationTests(RepositoryTestCase):
         self.assertIn("already exists", stderr)
 
         code, _, stderr = self.invoke("create", "Not Valid", "--no-edit")
-        self.assertEqual(65, code)
+        self.assertEqual(2, code)
         self.assertIn("lowercase", stderr)
+
+    def test_create_refuses_an_orphaned_nested_project(self) -> None:
+        code, _, stderr = self.invoke("create", "ghost/child", "--no-edit")
+
+        self.assertEqual(66, code)
+        self.assertIn("project not found: ghost", stderr)
+        self.assertFalse((self.projects / "ghost").exists())
 
     def test_status_changes_only_the_status_scalar(self) -> None:
         path = self.plan(
@@ -183,6 +227,35 @@ class MutationTests(RepositoryTestCase):
         self.assertEqual(0, code, stderr)
         self.assertEqual("updated", json.loads(stdout)["action"])
         self.assertEqual(before.replace("status: later", "status: now"), path.read_text())
+
+    def test_status_preserves_comments_and_crlf_line_endings(self) -> None:
+        path = self.plan("alpha", "later")
+        before = path.read_bytes().replace(
+            b"status: later\n", b"status: later # keep for Q3\n"
+        ).replace(b"\n", b"\r\n")
+        path.write_bytes(before)
+
+        code, _, stderr = self.invoke("status", "alpha", "now")
+
+        self.assertEqual(0, code, stderr)
+        self.assertEqual(
+            before.replace(b"status: later", b"status: now"), path.read_bytes()
+        )
+
+    def test_status_refuses_a_concurrent_body_edit(self) -> None:
+        path = self.plan("alpha", "later")
+        original_atomic_write = ProjectStore._atomic_write
+
+        def collide(target: Path, content: str, signature: tuple[int, int, int]) -> None:
+            target.write_text(target.read_text() + "Concurrent edit.\n")
+            original_atomic_write(target, content, signature)
+
+        with mock.patch.object(ProjectStore, "_atomic_write", side_effect=collide):
+            code, _, stderr = self.invoke("status", "alpha", "now")
+
+        self.assertEqual(65, code)
+        self.assertIn("changed before", stderr)
+        self.assertIn("Concurrent edit", path.read_text())
 
     def test_done_changes_status_and_reminds_about_the_outcome(self) -> None:
         path = self.plan("alpha", "now")
@@ -223,6 +296,16 @@ class MutationTests(RepositoryTestCase):
         self.assertEqual(65, code)
         self.assertIn("already exists", stderr)
 
+    def test_init_adds_a_missing_convention_file_to_an_existing_tree(self) -> None:
+        self.plan("alpha")
+        (self.projects / "README.md").unlink()
+
+        code, stdout, stderr = self.invoke("init")
+
+        self.assertEqual(0, code, stderr)
+        self.assertEqual("docs/projects/README.md\n", stdout)
+        self.assertTrue((self.projects / "alpha" / "readme.md").exists())
+
 
 class ValidationTests(RepositoryTestCase):
     def test_check_accepts_a_valid_tree_and_local_links(self) -> None:
@@ -232,6 +315,15 @@ class ValidationTests(RepositoryTestCase):
         (self.root / "docs" / "architecture.md").write_text("# Architecture\n")
         with (self.projects / "alpha" / "readme.md").open("a") as plan:
             plan.write("\nSee [architecture](../../architecture.md).\n")
+
+        code, stdout, stderr = self.invoke("check")
+
+        self.assertEqual(0, code, stderr)
+        self.assertEqual("Project plans are valid.\n", stdout)
+
+    def test_check_accepts_markdown_images(self) -> None:
+        self.plan("alpha", body="![Diagram](diagram.png)")
+        (self.projects / "alpha" / "diagram.png").write_bytes(b"image")
 
         code, stdout, stderr = self.invoke("check")
 
@@ -251,6 +343,8 @@ class ValidationTests(RepositoryTestCase):
         self.assertFalse(payload["valid"])
         invalid = [issue for issue in payload["issues"] if issue["code"] == "invalid-project"]
         self.assertEqual(2, len(invalid))
+        encoded = json.dumps(payload)
+        self.assertNotIn(str(self.root), encoded)
 
     def test_check_reports_wrong_case_missing_plans_and_broken_links(self) -> None:
         uppercase = self.projects / "uppercase" / "README.md"
@@ -268,11 +362,25 @@ class ValidationTests(RepositoryTestCase):
         self.assertIn("broken-project-link", codes)
 
     def test_check_uses_the_casing_recorded_by_git(self) -> None:
-        uppercase = self.projects / "uppercase" / "README.md"
-        uppercase.parent.mkdir()
-        uppercase.write_text(PLAN.format(status="later", extra="", title="Upper", body="Done"))
+        lowercase = self.plan("uppercase")
+        blob = subprocess.run(
+            ["git", "-C", str(self.root), "hash-object", "-w", str(lowercase)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
         subprocess.run(
-            ["git", "-C", str(self.root), "add", "docs/projects/uppercase/README.md"],
+            [
+                "git",
+                "-C",
+                str(self.root),
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                "100644",
+                blob,
+                "docs/projects/Uppercase/readme.md",
+            ],
             check=True,
         )
 
@@ -282,11 +390,88 @@ class ValidationTests(RepositoryTestCase):
         self.assertEqual(65, code)
         self.assertTrue(
             any(
-                issue["code"] == "wrong-entry-case"
-                and issue["path"] == "docs/projects/uppercase/README.md"
+                issue["code"] == "wrong-project-case"
+                and issue["path"] == "docs/projects/Uppercase/readme.md"
                 for issue in issues
             )
         )
+
+    def test_check_reports_case_collisions_recorded_only_by_git(self) -> None:
+        lowercase = self.plan("alpha")
+        blob = subprocess.run(
+            ["git", "-C", str(self.root), "hash-object", "-w", str(lowercase)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        for path in (
+            "docs/projects/alpha/readme.md",
+            "docs/projects/Alpha/readme.md",
+        ):
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(self.root),
+                    "update-index",
+                    "--add",
+                    "--cacheinfo",
+                    "100644",
+                    blob,
+                    path,
+                ],
+                check=True,
+            )
+
+        code, stdout, _ = self.invoke("check", "--json")
+        codes = {issue["code"] for issue in json.loads(stdout)["issues"]}
+
+        self.assertEqual(65, code)
+        self.assertIn("case-collision", codes)
+
+    def test_check_reports_missing_directory_symlink_and_exact_link_case(self) -> None:
+        (self.projects / "README.md").unlink()
+        self.projects.rmdir()
+        code, stdout, _ = self.invoke("check", "--json")
+        self.assertEqual(65, code)
+        self.assertEqual("missing-projects-dir", json.loads(stdout)["issues"][0]["code"])
+
+        self.projects.mkdir()
+        (self.projects / "README.md").write_text("# Projects\n")
+        self.plan("alpha", body="See [design](DESIGN.md).")
+        (self.projects / "alpha" / "design.md").write_text("# Design\n")
+        (self.projects / "alpha" / "linked").symlink_to("design.md")
+
+        code, stdout, _ = self.invoke("check", "--json")
+        codes = {issue["code"] for issue in json.loads(stdout)["issues"]}
+        self.assertEqual(65, code)
+        self.assertIn("symlink", codes)
+        self.assertIn("broken-project-link", codes)
+
+    def test_invalid_encoding_has_a_diagnostic_without_a_traceback(self) -> None:
+        path = self.projects / "encoded" / "readme.md"
+        path.parent.mkdir()
+        path.write_bytes(b"---\nstatus: now\n---\n\n# Bad \xff\n")
+
+        code, _, stderr = self.invoke("show", "encoded")
+
+        self.assertEqual(65, code)
+        self.assertIn("codec can't decode byte", stderr)
+        self.assertNotIn("Traceback", stderr)
+
+    def test_missing_project_uses_the_documented_exit_code(self) -> None:
+        code, _, stderr = self.invoke("show", "missing")
+        self.assertEqual(66, code)
+        self.assertIn("project not found", stderr)
+
+    def test_ambiguous_project_uses_the_documented_exit_code(self) -> None:
+        first = self.plan("alpha").resolve()
+        store = ProjectStore(self.root)
+        second = store.projects_dir / "Alpha" / "readme.md"
+        with mock.patch.object(store, "_entry_points", return_value=[first, second]):
+            with self.assertRaisesRegex(AmbiguousProject, "ambiguous project") as raised:
+                store.resolve("alpha")
+        self.assertEqual(67, raised.exception.exit_code)
 
     def test_check_reports_malformed_markdown_links(self) -> None:
         self.plan("alpha", body="Broken [link](design.md")
