@@ -330,6 +330,15 @@ class ValidationTests(RepositoryTestCase):
         self.assertEqual(0, code, stderr)
         self.assertEqual("Project plans are valid.\n", stdout)
 
+    def test_check_accepts_a_link_label_split_across_lines(self) -> None:
+        self.plan("alpha", body="Read [the design\nnotes](design.md).")
+        (self.projects / "alpha" / "design.md").write_text("# Design\n")
+
+        code, stdout, stderr = self.invoke("check")
+
+        self.assertEqual(0, code, stderr)
+        self.assertEqual("Project plans are valid.\n", stdout)
+
     def test_check_reports_every_invalid_plan(self) -> None:
         self.plan("bad-status", "waiting")
         malformed = self.projects / "malformed" / "readme.md"

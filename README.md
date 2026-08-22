@@ -27,6 +27,37 @@ python3 -m venv .venv
 .venv/bin/projector --help
 ```
 
+## Install the agent workflows
+
+Projector packages the same canonical skills for Claude Code and Codex. Add the
+repository as a marketplace and install the plugin for either host:
+
+```sh
+claude plugin marketplace add ninjudd/projector --scope user
+claude plugin install projector@projector --scope user
+
+codex plugin marketplace add ninjudd/projector
+codex plugin add projector@projector
+```
+
+When you work from a clone, install the CLI and both plugins together:
+
+```sh
+git clone https://github.com/ninjudd/projector.git
+cd projector
+./install.sh all
+```
+
+The installer removes only legacy symlinks that point from the host's old
+agent-config locations into this checkout. It does not replace configuration
+directories or touch user-owned files. Run `./install.sh status` before an
+upgrade to inspect those paths.
+
+The plugin provides `plan-project`, `work-project`, `finish-project`,
+`migrate-projects`, `start-review-loop`, and `start-fix-loop`. Claude invokes a
+plugin skill as `/projector:<skill>`; Codex invokes it as `$<skill>`. The core
+workflows use the local CLI and do not require MCP.
+
 ## Adopt Projector in a repository
 
 Run `init` from anywhere inside a Git repository:
@@ -68,8 +99,8 @@ projector check [--json]
 
 Use `--json` when an agent or script consumes output. Every JSON response has
 `"schema_version": 1`; diagnostics go to stderr. See [the CLI
-reference](docs/cli.md) and [the project convention](docs/projects/README.md)
-for the complete contracts.
+reference](docs/cli.md), [the plugin guide](docs/plugins.md), and [the project
+convention](docs/projects/README.md) for the complete contracts.
 
 The legacy `install.sh` still installs the pre-Projector agent configuration.
 Use the CLI installation above for this layer; native Claude and Codex plugin
@@ -82,5 +113,7 @@ Run the validation gate from the repository root:
 ```sh
 PYTHONPATH=src python3 -m unittest discover -v
 PYTHONPATH=src python3 -m projector check
+claude plugin validate .
+claude plugin validate skills
 git diff --check
 ```

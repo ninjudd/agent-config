@@ -1,20 +1,9 @@
-# Credentials never belong here, even by accident.
+# Credentials and local build output never belong here.
 auth.json
 .credentials.json
 *.bak
 *.bak.*
 .venv/
-src/*.egg-info/
-
-# Codex materializes its built-in skills into the linked skills directory, which
-# means into this repo. They ship with Codex and are regenerated on demand.
-/skills/.system/
-
-# A local symlink to the msg repo's own copy of its skill, so this laptop gets it
-# without vendoring. The target is an absolute path that exists on one machine, so
-# committing it gives every other checkout a dangling skill that install.sh cannot
-# report. Delete this line if the skill is ever vendored here properly, the way
-# gh-stack and gog are — a real directory at this path should be tracked.
-/skills/msg
-
+*.egg-info/
+__pycache__/
 .DS_Store

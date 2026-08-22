@@ -438,30 +438,33 @@ class ProjectStore:
     def _check_links(self, path: Path) -> list[Issue]:
         issues: list[Issue] = []
         text = self._read_text(path)
-        for line_number, line in enumerate(text.splitlines(), 1):
-            for raw_target in LINK.findall(line):
-                target = raw_target.strip().split(maxsplit=1)[0].strip("<>\"'")
-                parsed = urlsplit(target)
-                if parsed.scheme or parsed.netloc or not parsed.path:
-                    continue
-                candidate = (path.parent / unquote(parsed.path)).resolve()
-                if not self._exact_path_exists(candidate):
-                    issues.append(
-                        Issue(
-                            "broken-project-link",
-                            f"{self._relative(path)}:{line_number}",
-                            f"target does not exist: {target}",
-                        )
-                    )
-            without_images = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", line)
-            if without_images.count("](") > len(LINK.findall(without_images)):
+        for match in LINK.finditer(text):
+            raw_target = match.group(1)
+            line_number = text.count("\n", 0, match.start()) + 1
+            target = raw_target.strip().split(maxsplit=1)[0].strip("<>\"'")
+            parsed = urlsplit(target)
+            if parsed.scheme or parsed.netloc or not parsed.path:
+                continue
+            candidate = (path.parent / unquote(parsed.path)).resolve()
+            if not self._exact_path_exists(candidate):
                 issues.append(
                     Issue(
-                        "malformed-project-link",
+                        "broken-project-link",
                         f"{self._relative(path)}:{line_number}",
-                        "malformed Markdown link",
+                        f"target does not exist: {target}",
                     )
                 )
+        unmatched = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)
+        unmatched = LINK.sub("", unmatched)
+        for match in re.finditer(r"\]\(", unmatched):
+            line_number = unmatched.count("\n", 0, match.start()) + 1
+            issues.append(
+                Issue(
+                    "malformed-project-link",
+                    f"{self._relative(path)}:{line_number}",
+                    "malformed Markdown link",
+                )
+            )
         return issues
 
     def _tracked_paths(self) -> list[str]:

@@ -1,0 +1,20 @@
+{
+  "name": "projector",
+  "interface": {
+    "displayName": "Projector"
+  },
+  "plugins": [
+    {
+      "name": "projector",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
