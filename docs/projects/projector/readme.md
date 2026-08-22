@@ -1,5 +1,5 @@
 ---
-status: next
+status: now
 ---
 
 # Turn agent-config into Projector
@@ -407,12 +407,15 @@ Projector is ready for its first release when all of these are true:
 - **Migrate through a temporary skill first.** The initial migration uses
   public CLI primitives and Git; it becomes a permanent CLI command only if the
   workflow remains useful after the known repositories move.
+- **Implement the CLI in dependency-free Python 3.9.** A standard Python
+  package gives `pipx` and `pip` users one cross-platform executable without a
+  runtime dependency graph.
+- **Use the repository root as both plugin roots.** Claude Code reads
+  `.claude-plugin/plugin.json`, Codex reads `.codex-plugin/plugin.json`, and
+  both discover the canonical `skills/` tree beside those manifests.
 - **Separate reusable workflow from private configuration.** Projector remains
   portable, while `agent-config-private` can keep personal tools and policy.
 
 ## 12. Open questions
 
-- Which implementation language and packaging route provide the simplest
-  cross-platform installation while preserving a single dependable CLI?
-- What repository layout lets both host manifests package the same skill files
-  without copying them into generated trees?
+No open questions remain for the first implementation.

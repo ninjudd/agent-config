@@ -3,6 +3,8 @@ auth.json
 .credentials.json
 *.bak
 *.bak.*
+.venv/
+src/*.egg-info/
 
 # Codex materializes its built-in skills into the linked skills directory, which
 # means into this repo. They ship with Codex and are regenerated on demand.
