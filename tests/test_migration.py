@@ -107,12 +107,20 @@ class MigrationTests(unittest.TestCase):
         )
         self.write("docs/projects/all/decisions/note.md", "# Note\n")
         self.write("docs/projects/all/no-status.md", legacy_plan(None, "No status"))
-        self.write("docs/projects/all/folder/README.md", legacy_plan("Draft", "Folder"))
+        self.write(
+            "docs/projects/all/folder/README.md",
+            legacy_plan("Draft", "Folder")
+            + "See [self](README.md) and [same](./README.md).\n",
+        )
         self.write(
             "docs/projects/all/folder/child/README.md",
             legacy_plan("Stalled", "Child"),
         )
         self.write("docs/projects/all/folder/design.md", "# Design\n")
+        self.write(
+            "docs/projects/all/folder/notes/deep/note.md",
+            "See [project](../../README.md).\n",
+        )
         self.write(
             "notes.txt",
             "See docs/projects/all/alpha.md and docs/projects/all/folder/design.md.\n",
@@ -156,6 +164,11 @@ class MigrationTests(unittest.TestCase):
             self.assertTrue(path.exists(), name)
             self.assertIn(f"status: {status}", path.read_text())
         self.assertTrue((self.projects / "folder" / "design.md").exists())
+        folder = (self.projects / "folder" / "readme.md").read_text()
+        self.assertIn("[self](readme.md)", folder)
+        self.assertIn("[same](readme.md)", folder)
+        deep_note = self.projects / "folder" / "notes" / "deep" / "note.md"
+        self.assertIn("[project](../../readme.md)", deep_note.read_text())
         self.assertFalse((self.projects / "all").exists())
         self.assertFalse((self.projects / "now.md").exists())
         self.assertIn("lowercase `readme.md`", (self.projects / "README.md").read_text())

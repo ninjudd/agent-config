@@ -366,6 +366,12 @@ def repair_markdown_links(root: Path, report: Report) -> None:
     }
     convention = root / "docs" / "projects" / "README.md"
 
+    def exact_name_exists(candidate: Path) -> bool:
+        try:
+            return candidate.name in {child.name for child in candidate.parent.iterdir()}
+        except OSError:
+            return False
+
     def replacement(path: Path, match: re.Match[str]) -> str:
         raw = match.group(2)
         token = raw.strip().split(maxsplit=1)[0].strip("<>\"'")
@@ -373,14 +379,18 @@ def repair_markdown_links(root: Path, report: Report) -> None:
         if parsed.scheme or parsed.netloc or not parsed.path:
             return match.group(0)
         current = (path.parent / unquote(parsed.path)).resolve()
-        if current.exists():
+        if exact_name_exists(current):
             return match.group(0)
 
         target: Optional[Path] = None
         target_path = Path(unquote(parsed.path))
-        if target_path.name in LIST_FILES.values():
+        if target_path.name in ("README.md", "overview.md"):
+            lowercase_entry = current.with_name("readme.md")
+            if exact_name_exists(lowercase_entry):
+                target = lowercase_entry
+        if target is None and target_path.name in LIST_FILES.values():
             target = convention
-        else:
+        elif target is None:
             stem = target_path.stem
             if stem in projects:
                 target = projects[stem]
