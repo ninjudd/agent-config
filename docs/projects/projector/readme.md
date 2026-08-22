@@ -1,0 +1,318 @@
+---
+status: now
+---
+
+# Turn agent-config into Projector
+
+## 1. Outcome
+
+Projector is a framework for getting work done in any Git repository. It keeps
+project intent in Git, gives people and agents one command-line interface for
+working with that intent, and supplies durable review and fix loops for taking
+code through pull request feedback.
+
+The finished repository has three primary parts:
+
+- A convention for project plans under `docs/projects/`.
+- A `projector` CLI for finding, viewing, creating, editing, validating, and
+  completing projects.
+- Agent skills for planning and executing projects and for running code review
+  and fix loops.
+
+The repository is no longer the public home for one person's global agent
+configuration. Personal and machine-specific material belongs in
+`ninjudd/agent-config-private`.
+
+## 2. Product principles
+
+Projector follows these principles:
+
+- **Git is the database.** A clone contains the project plans and their history.
+  Projector does not require a service, account, daemon, or generated index.
+- **One project has one permanent home.** A status change edits frontmatter; it
+  does not move a file or maintain a second representation.
+- **Concurrent projects change different files.** Listing and prioritization
+  are queries, so branches do not contend on `now.md`, `next.md`, or
+  `later.md`.
+- **Projects can grow recursively.** Every feature starts as a directory and can
+  acquire supporting documents or nested projects without changing shape.
+- **The command line serves people and agents.** Human output is concise, while
+  stable JSON supports automation.
+- **Skills express workflows; the CLI supplies mechanics.** Skills tell an
+  agent how to plan, execute, review, and finish work. They call the same
+  commands a person can inspect and run.
+- **Repository policy stays local.** Projector provides useful defaults without
+  embedding one user's GitHub accounts, home-directory layout, or review rules.
+
+## 3. Project format
+
+Every project lives directly or recursively under `docs/projects/` and has a
+lowercase `readme.md` entry point. The path relative to `docs/projects/` is its
+canonical name:
+
+```text
+docs/projects/payments/readme.md
+docs/projects/payments/invoices/readme.md
+```
+
+The first path names `payments`; the second names the nested project
+`payments/invoices`. Supplemental directories do not become projects unless
+they contain their own lowercase `readme.md`.
+
+`readme.md` uses YAML frontmatter with one required status:
+
+```yaml
+---
+status: next
+---
+```
+
+The allowed values are `now`, `next`, `later`, and `done`. They replace both
+the shared queue files and proposed queue directories. A completed project's
+plan records whether it shipped, was abandoned, or was superseded. Projector
+can add a separate resolution field later if real queries require one.
+
+Use lowercase `readme.md` so GitHub renders the project plan when you browse its
+directory while the filename remains subtly distinct from a conventional
+uppercase `README.md`. The exact casing is part of the format. Projector checks
+both directory entries and tracked Git paths rather than trusting
+case-insensitive path lookup when it validates the name.
+
+Number the sections in a plan and never renumber them. Because status changes
+do not move the directory, a citation such as
+`docs/projects/payments/readme.md § 6` stays valid throughout the project
+lifecycle. Only an intentional rename or reparenting requires a reference
+sweep.
+
+The convention in `docs/projects/README.md` is the first working version of
+this format. This plan dogfoods it at `docs/projects/projector/readme.md`.
+
+## 4. Command-line interface
+
+The `projector` CLI discovers the Git root from the current directory and uses
+that repository's `docs/projects/` tree. It offers explicit `--root` and
+`--projects-dir` overrides for unusual layouts. It never needs network access
+for project operations.
+
+The initial command set is:
+
+```sh
+projector init
+projector list [--status now|next|later|done] [--json]
+projector show <project> [--json]
+projector search <query> [--status <status>] [--json]
+projector create <project> [--status later] [--parent <project>]
+projector edit <project>
+projector status <project> <status>
+projector done <project>
+projector check [--json]
+```
+
+The commands behave as follows:
+
+- `init` creates `docs/projects/README.md` when a repository has not adopted
+  the convention. It does not overwrite an existing project system.
+- `list` recursively discovers `readme.md` files and returns their canonical
+  names, titles, statuses, and owners when present. Its default human view
+  groups results by status without writing those groups to disk.
+- `show` resolves a canonical name and prints the frontmatter and rendered or
+  plain plan content.
+- `search` searches project names, metadata, plans, and supplemental Markdown
+  files while reporting the containing project.
+- `create` validates the name, creates one project directory and `readme.md`,
+  and opens the new plan in `$EDITOR` when the command is interactive. Creating
+  `payments/invoices` makes a nested project without changing the parent plan.
+- `edit` resolves and opens `readme.md` without requiring the caller to know its
+  path.
+- `status` changes only the target project's frontmatter. `done` is a readable
+  shorthand that also prompts the user to record the outcome in the plan.
+- `check` rejects missing or invalid frontmatter, project directories without a
+  usable plan, incorrect `readme.md` casing, duplicate or ambiguous discovery
+  results, malformed Markdown links between project files, and invalid nesting.
+
+Mutation commands show the exact files they changed. They preserve unrelated
+frontmatter and file formatting, fail rather than overwrite uncommitted edits,
+and make no commits. Non-interactive use requires all choices as flags and
+never opens an editor.
+
+JSON output has a versioned shape, uses stdout only for data, and sends
+diagnostics to stderr. Exit codes distinguish invalid project data, a missing
+project, ambiguous input, and command misuse so skills do not parse prose.
+
+## 5. Conflict behavior
+
+The format removes the common conflict points by construction. Creating or
+updating unrelated projects changes unrelated `readme.md` files. Listing and
+searching do not update an index. Changing `later` to `now` edits one scalar in
+the affected project instead of moving a tree or editing a shared list.
+
+Two branches that change the same project can still conflict. That conflict is
+useful: both branches are making claims about the same work and should be
+reconciled. Projector must not avoid it by creating duplicate status records.
+
+A parent and child can have independent statuses. For example, a parent can
+remain `now` after one nested project becomes `done`. The CLI displays the
+hierarchy and can roll up child counts, but it never infers or rewrites a
+parent's status from its children.
+
+## 6. Agent skills
+
+The existing review and fix loops remain core Projector capabilities, but they
+must become portable. Their current instructions assume the `ninjudd` author
+and `minjudd` reviewer identities and personal repository policy. Projector
+will obtain identities and policy from repository instructions, explicit skill
+arguments, or user configuration. It will fail clearly when GitHub cannot
+supply a separate reviewer instead of silently weakening a verdict.
+
+Projector adds three project workflow skills:
+
+- `plan-project` inspects the repository, creates or refines a project plan,
+  records decisions and open questions, and assigns `later`, `next`, or `now`
+  from the user's intent. It does not claim readiness merely because a plan
+  exists.
+- `work-project` resolves a project through the CLI, reads its full context,
+  makes it `now` when work truly begins, implements a coherent slice, and keeps
+  the plan current in the same pull request.
+- `finish-project` verifies acceptance criteria, records the outcome, changes
+  the project to `done` in the implementation pull request that completes it,
+  and confirms that no follow-up closeout pull request is being deferred.
+
+All three use `projector check` before handing work over. They share project
+mechanics through the CLI rather than duplicating frontmatter parsing in skill
+instructions.
+
+`start-review-loop` continues to review exact pull request heads and publish
+verified findings. `start-fix-loop` continues to verify findings before fixing,
+replying, and resolving them. `gh-stack` remains a supporting GitHub workflow
+skill rather than a primary Projector component.
+
+## 7. Repository transformation
+
+The current repository contains a global `AGENTS.md`, a symlink-oriented
+`install.sh`, placeholder Claude and Codex directories, the two loop skills,
+`gh-stack`, and the vendored `gog` skill. The transformation separates reusable
+workflow from personal configuration:
+
+1. Replace the agent-config README with the Projector product overview and
+   document installation, adoption, and the project format.
+2. Replace the global-config installer with distribution for the `projector`
+   CLI and reusable skills. Installing Projector must not replace a user's
+   complete Claude or Codex configuration directories.
+3. Reduce this repository's `AGENTS.md` to contributor guidance for Projector.
+   Move personal global instructions and machine-local configuration to
+   `ninjudd/agent-config-private`.
+4. Copy `skills/gog/` to `ninjudd/agent-config-private`, verify the private
+   install sees it, and then remove it from Projector. The copy and removal must
+   not create a window where the skill is lost.
+5. Generalize the review and fix skills without weakening their exact-head,
+   separate-reviewer, verified-finding, or never-merge safeguards.
+6. Add the project workflow skills after the CLI contract they depend on is
+   covered by tests.
+7. Remove agent-config placeholders and compatibility behavior after the new
+   install path covers every reusable component that remains.
+
+The remote already points at `ninjudd/projector`; the repository contents and
+release surface now need to catch up with that identity.
+
+## 8. Migrate existing repositories
+
+Modal, Fyra, Field, and msg use the older `now.md`, `next.md`, `later.md`, and
+`all/` convention. Projector needs a migration workflow that preserves history
+and citations as far as Git allows.
+
+For each old project, migration performs these steps:
+
+1. Read list membership and status frontmatter before changing any paths.
+2. Convert `all/name.md` or `all/name/README.md` to `name/readme.md` with
+   `git mv`.
+3. Map list membership to `status: now`, `status: next`, or `status: later`.
+   Map shipped, superseded, and abandoned work to `status: done` and retain its
+   precise outcome in the body.
+4. Preserve supplemental files and existing nested project structure.
+5. Rewrite inbound path references in documentation and code comments.
+6. Remove the old list files and `all/` only after every project is accounted
+   for.
+7. Run `projector check`, then compare an `rg` reference sweep with
+   `command grep -rl` before declaring the migration complete.
+
+The CLI may automate this as `projector migrate`, but the migration contract
+comes before that command. A dry run must report every proposed mapping and
+refuse ambiguous list membership rather than guess.
+
+## 9. Implementation sequence
+
+Build Projector in this order:
+
+1. Specify fixtures for top-level projects, nested projects, supplemental
+   directories, malformed frontmatter, and all four statuses. Implement
+   discovery, parsing, `list`, `show`, `search`, and `check` against them.
+2. Implement `init`, `create`, `edit`, `status`, and `done`, including
+   non-interactive behavior and stable JSON.
+3. Implement and test migration from the current convention on representative
+   repository fixtures.
+4. Add the three project workflow skills and generalize the review and fix
+   loops against the CLI and repository-local configuration.
+5. Rework installation and documentation, move private content out, and test a
+   clean install plus an upgrade from agent-config.
+6. Adopt Projector in one existing repository, use the result to correct the
+   migration, and then migrate the remaining repositories.
+
+These steps sequence dependencies; they do not prescribe pull request size.
+Combine adjacent work when it makes one reviewable argument, and split only
+when a part has independent value or exceeds the reviewability ceiling.
+
+## 10. Acceptance criteria
+
+Projector is ready for its first release when all of these are true:
+
+- A new Git repository can adopt the convention without copying personal
+  configuration.
+- Two branches can create different projects and change their statuses without
+  touching a shared index or moving either project.
+- The CLI discovers top-level and nested projects from any subdirectory in the
+  repository.
+- Human output supports quick browsing, and documented JSON output supports
+  agent automation without prose parsing.
+- Mutation commands preserve unrelated content, refuse destructive ambiguity,
+  and leave changes visible for normal Git review.
+- `projector check` catches invalid statuses, malformed plans, wrong entry-point
+  casing, ambiguous nesting, and broken project links.
+- The project skills can plan, start, update, and finish a real project using
+  only the public CLI contract.
+- The review and fix loops work without hard-coded personal identities and
+  retain their existing safety guarantees.
+- `gog` and other personal configuration are installed from
+  `ninjudd/agent-config-private`, not Projector.
+- The documented migration succeeds on a fixture representing the current
+  Modal, Fyra, Field, and msg layout.
+
+## 11. Decisions
+
+- **Store status in frontmatter.** This avoids shared queue files and path churn.
+  Queue directories and symlinks were rejected because both create a second
+  representation of state, and moving between queue directories breaks links.
+- **Put projects directly under `docs/projects/`.** An `all/` segment provides
+  no information once the CLI generates every view.
+- **Make every project a directory.** This supports supplemental files and
+  nested projects from the beginning without later file-to-directory moves.
+- **Use lowercase `readme.md` as the project sentinel.** GitHub renders it
+  automatically, while the casing distinguishes a project plan from a standard
+  `README.md`. Projector enforces the distinction from Git's recorded path.
+- **Derive identity from the permanent relative path.** Frontmatter does not
+  repeat a name that can drift. Renaming or reparenting is an intentional
+  identity change with a reference sweep.
+- **Keep one source of truth.** The CLI does not generate tracked indexes,
+  status links, or cache files.
+- **Separate reusable workflow from private configuration.** Projector remains
+  portable, while `agent-config-private` can keep personal tools and policy.
+
+## 12. Open questions
+
+- Which implementation language and packaging route provide the simplest
+  cross-platform installation while preserving a single dependable CLI?
+- Where should portable skill configuration end and repository-specific
+  `AGENTS.md` policy begin, especially for GitHub reviewer identity?
+- Does real use require structured completion outcomes, tags, or dependencies,
+  or can those remain prose until a query proves their value?
+- Should migration ship as a permanent CLI command or as a temporary skill
+  built on lower-level Projector commands?
