@@ -1,0 +1,4 @@
+interface:
+  display_name: "Migrate Projects"
+  short_description: "Migrate legacy project plans into Projector"
+  default_prompt: "Use $migrate-projects to migrate this repository to Projector."

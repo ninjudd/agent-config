@@ -1,0 +1,4 @@
+interface:
+  display_name: "Finish Project"
+  short_description: "Verify and close a completed project plan"
+  default_prompt: "Use $finish-project to verify and finish this project."

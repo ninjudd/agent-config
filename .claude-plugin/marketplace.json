@@ -1,0 +1,15 @@
+{
+  "name": "projector",
+  "description": "Git-native project planning and agent workflows",
+  "owner": {
+    "name": "Justin Balthrop"
+  },
+  "plugins": [
+    {
+      "name": "projector",
+      "source": ".",
+      "category": "Productivity",
+      "tags": ["planning", "git", "agents", "review"]
+    }
+  ]
+}

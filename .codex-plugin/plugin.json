@@ -1,0 +1,28 @@
+{
+  "name": "projector",
+  "version": "0.1.0",
+  "description": "Git-native project plans and agent workflows for any repository",
+  "author": {
+    "name": "Justin Balthrop",
+    "url": "https://github.com/ninjudd"
+  },
+  "homepage": "https://github.com/ninjudd/projector",
+  "repository": "https://github.com/ninjudd/projector",
+  "license": "MIT",
+  "keywords": ["projects", "planning", "git", "agents", "code-review"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Projector",
+    "shortDescription": "Plan, implement, migrate, and review Git projects",
+    "longDescription": "Projector keeps project plans in Git and gives coding agents portable workflows for planning, implementation, migration, review, and review fixes.",
+    "developerName": "Justin Balthrop",
+    "category": "Productivity",
+    "capabilities": ["Planning", "Code", "Review"],
+    "websiteURL": "https://github.com/ninjudd/projector",
+    "defaultPrompt": [
+      "Plan this project with Projector.",
+      "Implement the current Projector plan.",
+      "Review and fix this pull request loop."
+    ]
+  }
+}

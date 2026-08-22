@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Project"
+  short_description: "Create an executable Git-native project plan"
+  default_prompt: "Use $plan-project to plan this project in docs/projects."

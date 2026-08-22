@@ -1,0 +1,4 @@
+interface:
+  display_name: "Work Project"
+  short_description: "Implement and maintain a current project plan"
+  default_prompt: "Use $work-project to implement the current project."
